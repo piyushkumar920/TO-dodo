@@ -7,4 +7,9 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="tododo_yellow">#FFFDE047</color>
+    <color name="tododo_yellow_light">#FFFEF9C3</color>
+    <color name="tododo_cream">#FFFFFBEB</color>
+    <color name="tododo_dark">#FF2D3436</color>
+    <color name="tododo_gray">#FF636E72</color>
 </resources>

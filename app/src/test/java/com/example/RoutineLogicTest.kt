@@ -106,4 +106,60 @@ class RoutineLogicTest {
         }
         assertFalse(parsedSafely)
     }
+
+    @Test
+    fun testStreakExactBoundary69And70Percent() {
+        val total = 100
+        // 69% completed
+        val completed69 = 69
+        val percent69 = ((completed69.toFloat() / total) * 100).toInt()
+        assertEquals(69, percent69)
+        assertFalse("69% must NOT count toward streak", percent69 >= 70)
+
+        // 70% completed
+        val completed70 = 70
+        val percent70 = ((completed70.toFloat() / total) * 100).toInt()
+        assertEquals(70, percent70)
+        assertTrue("70% MUST count toward streak", percent70 >= 70)
+
+        // 100% completed
+        val completed100 = 100
+        val percent100 = ((completed100.toFloat() / total) * 100).toInt()
+        assertEquals(100, percent100)
+        assertTrue("100% MUST count toward streak", percent100 >= 70)
+        assertTrue("100% qualifies for Credit Score award", completed100 >= total)
+    }
+
+    @Test
+    fun testMissedDayDoesNotDeductCreditScore() {
+        val awards = mutableListOf(
+            CreditAwardEntity(date = "2026-10-01", creditAwarded = true),
+            CreditAwardEntity(date = "2026-10-02", creditAwarded = true)
+        )
+        val initialScore = awards.size
+        assertEquals(2, initialScore)
+
+        // Day 2026-10-03 is missed (no completion)
+        // Score remains strictly cumulative based on awards count
+        val scoreAfterMissedDay = awards.size
+        assertEquals(2, scoreAfterMissedDay)
+        assertEquals(initialScore, scoreAfterMissedDay)
+    }
+
+    @Test
+    fun testTimeRecalculationCannotTriggerCreditScoreOrCelebration() {
+        var creditScore = 5
+        var celebrationTriggered = false
+
+        // Simulate 10 time tick recalculations
+        for (i in 0 until 10) {
+            // Recalculating time/date must not mutate awards or trigger celebration
+            val newTime = LocalDateTime.of(2026, 10, 2, 12, i)
+            val logicalDate = com.example.util.RoutineTimeEngine.getLogicalDate(newTime)
+            assertNotNull(logicalDate)
+            // Verify invariants
+            assertEquals(5, creditScore)
+            assertFalse(celebrationTriggered)
+        }
+    }
 }

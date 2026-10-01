@@ -8,93 +8,373 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import com.example.ui.theme.*
+import com.example.util.CelebrationSoundHelper
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * Lightweight Party Popper Confetti explosion beside a completed task
+ * Root-level full-screen overlay for individual task completion confetti bursts.
+ * Rendered at the root Box / Scaffold level with zIndex(999f) to eliminate parent clipping.
  */
 @Composable
-fun PartyPopperEffect(
-    modifier: Modifier = Modifier,
-    onFinished: () -> Unit
+fun TaskConfettiOverlay(
+    burstOrigin: Offset?,
+    onBurstFinished: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val transitionProgress = remember { Animatable(0f) }
+    if (burstOrigin == null) return
 
-    LaunchedEffect(Unit) {
-        transitionProgress.animateTo(
+    val progress = remember(burstOrigin) { Animatable(0f) }
+
+    LaunchedEffect(burstOrigin) {
+        progress.snapTo(0f)
+        progress.animateTo(
             targetValue = 1f,
-            animationSpec = tween(durationMillis = 750, easing = LinearOutSlowInEasing)
+            animationSpec = tween(durationMillis = 850, easing = LinearOutSlowInEasing)
         )
-        onFinished()
+        onBurstFinished()
     }
 
-    val progress = transitionProgress.value
-    if (progress >= 1f) return
+    val currentProgress = progress.value
+    if (currentProgress >= 1f) return
 
-    val particles = remember {
-        List(14) { index ->
-            val angle = (index * (360f / 14f) + Random.nextFloat() * 20f) * (Math.PI / 180f)
-            val speed = 35f + Random.nextFloat() * 40f
-            val color = when (index % 5) {
-                0 -> ToDodoYellow
-                1 -> ToDodoOrange
-                2 -> ToDodoPink
-                3 -> ToDodoLavender
-                else -> ToDodoGreen
-            }
-            val size = 4f + Random.nextFloat() * 4f
-            Triple(angle, speed, color to size)
+    val particles = remember(burstOrigin) {
+        val colors = listOf(
+            Color(0xFFFFD700), // Gold
+            Color(0xFFFF6B81), // Coral Pink
+            Color(0xFFFFA502), // Pastel Orange
+            Color(0xFF2ED573), // Mint Green
+            Color(0xFF70A1FF), // Sky Blue
+            Color(0xFFA29BFE), // Lavender
+            Color(0xFFFF7675)  // Warm Pink
+        )
+        List(36) { i ->
+            val angle = (i * (360f / 36f) + Random.nextFloat() * 12f) * (Math.PI / 180f)
+            val speed = 80f + Random.nextFloat() * 110f
+            val color = colors[i % colors.size]
+            val type = i % 4 // 0: circle, 1: star, 2: rect ribbon, 3: diamond sparkle
+            val size = 6f + Random.nextFloat() * 7f
+            val rotationSpeed = (Random.nextFloat() - 0.5f) * 900f
+            TaskParticle(angle, speed, color, type, size, rotationSpeed)
         }
     }
 
-    Canvas(modifier = modifier.size(60.dp)) {
-        val center = Offset(size.width / 2f, size.height / 2f)
-        val alpha = (1f - progress).coerceIn(0f, 1f)
+    Canvas(
+        modifier = modifier
+            .fillMaxSize()
+            .zIndex(999f)
+    ) {
+        val center = burstOrigin
+        val alpha = (1f - currentProgress * 0.95f).coerceIn(0f, 1f)
 
-        particles.forEach { (angle, speed, props) ->
-            val (color, pSize) = props
-            val dist = speed * progress
-            val x = center.x + cos(angle).toFloat() * dist
-            val y = center.y + sin(angle).toFloat() * dist - (progress * 10f) // gentle upward arch
+        particles.forEach { p ->
+            val dist = p.speed * currentProgress
+            val gravity = currentProgress * currentProgress * 80f // downward gravitational acceleration
+            val x = center.x + cos(p.angle).toFloat() * dist
+            val y = center.y + sin(p.angle).toFloat() * dist + gravity
+            val currentRot = p.rotationSpeed * currentProgress
 
-            drawCircle(
-                color = color.copy(alpha = alpha),
-                radius = pSize * (1f - (progress * 0.4f)),
-                center = Offset(x, y)
-            )
+            when (p.type) {
+                0 -> {
+                    // Crisp pastel circle
+                    drawCircle(
+                        color = p.color.copy(alpha = alpha),
+                        radius = p.size * (1f - currentProgress * 0.25f),
+                        center = Offset(x, y)
+                    )
+                }
+                1 -> {
+                    // 5-Pointed Star
+                    rotate(degrees = currentRot, pivot = Offset(x, y)) {
+                        drawStar(
+                            center = Offset(x, y),
+                            size = p.size * 2.4f,
+                            color = p.color.copy(alpha = alpha)
+                        )
+                    }
+                }
+                2 -> {
+                    // Fluttering Paper Confetti Ribbon
+                    rotate(degrees = currentRot, pivot = Offset(x, y)) {
+                        drawRoundRect(
+                            color = p.color.copy(alpha = alpha),
+                            topLeft = Offset(x - p.size, y - p.size * 0.5f),
+                            size = Size(p.size * 2.4f, p.size * 1.2f),
+                            cornerRadius = CornerRadius(2f, 2f)
+                        )
+                    }
+                }
+                3 -> {
+                    // Radiating Sparkle Diamond
+                    rotate(degrees = currentRot, pivot = Offset(x, y)) {
+                        drawSparkleDiamond(
+                            center = Offset(x, y),
+                            radius = p.size * 2.0f,
+                            color = p.color.copy(alpha = alpha)
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 /**
- * Dancing To-Dodo Chicken holding Credit Score Board with full celebration overlay
+ * Local Task Item Confetti Popper Burst (fallback or inline support).
+ */
+@Composable
+fun TaskConfettiPopper(
+    modifier: Modifier = Modifier,
+    onFinished: () -> Unit
+) {
+    val progress = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 800, easing = LinearOutSlowInEasing)
+        )
+        onFinished()
+    }
+
+    val currentProgress = progress.value
+    if (currentProgress >= 1f) return
+
+    val particles = remember {
+        val colors = listOf(
+            Color(0xFFFFD700),
+            Color(0xFFFF6B81),
+            Color(0xFFFFA502),
+            Color(0xFF2ED573),
+            Color(0xFF70A1FF),
+            Color(0xFFA29BFE)
+        )
+        List(28) { i ->
+            val angle = (i * (360f / 28f) + Random.nextFloat() * 15f) * (Math.PI / 180f)
+            val speed = 65f + Random.nextFloat() * 75f
+            val color = colors[i % colors.size]
+            val type = i % 4
+            val size = 5.5f + Random.nextFloat() * 5.5f
+            val rotationSpeed = (Random.nextFloat() - 0.5f) * 720f
+            TaskParticle(angle, speed, color, type, size, rotationSpeed)
+        }
+    }
+
+    Canvas(
+        modifier = modifier
+            .size(160.dp)
+            .zIndex(100f)
+    ) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val alpha = (1f - currentProgress * 0.95f).coerceIn(0f, 1f)
+
+        particles.forEach { p ->
+            val dist = p.speed * currentProgress
+            val gravity = currentProgress * currentProgress * 50f
+            val x = center.x + cos(p.angle).toFloat() * dist
+            val y = center.y + sin(p.angle).toFloat() * dist + gravity
+            val currentRot = p.rotationSpeed * currentProgress
+
+            when (p.type) {
+                0 -> {
+                    drawCircle(
+                        color = p.color.copy(alpha = alpha),
+                        radius = p.size * (1f - currentProgress * 0.3f),
+                        center = Offset(x, y)
+                    )
+                }
+                1 -> {
+                    rotate(degrees = currentRot, pivot = Offset(x, y)) {
+                        drawStar(
+                            center = Offset(x, y),
+                            size = p.size * 2.2f,
+                            color = p.color.copy(alpha = alpha)
+                        )
+                    }
+                }
+                2 -> {
+                    rotate(degrees = currentRot, pivot = Offset(x, y)) {
+                        drawRoundRect(
+                            color = p.color.copy(alpha = alpha),
+                            topLeft = Offset(x - p.size, y - p.size * 0.5f),
+                            size = Size(p.size * 2.2f, p.size * 1.1f),
+                            cornerRadius = CornerRadius(2f, 2f)
+                        )
+                    }
+                }
+                3 -> {
+                    rotate(degrees = currentRot, pivot = Offset(x, y)) {
+                        drawSparkleDiamond(
+                            center = Offset(x, y),
+                            radius = p.size * 1.8f,
+                            color = p.color.copy(alpha = alpha)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class TaskParticle(
+    val angle: Double,
+    val speed: Float,
+    val color: Color,
+    val type: Int,
+    val size: Float,
+    val rotationSpeed: Float
+)
+
+/**
+ * Full Screen Confetti Rain for 100% Day Completion
+ */
+@Composable
+fun FullDayConfettiRain(
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "confettiRain")
+    val time by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rainTime"
+    )
+
+    val rainParticles = remember {
+        val colors = listOf(
+            Color(0xFFFFD700),
+            Color(0xFFFF6B81),
+            Color(0xFFFFA502),
+            Color(0xFF2ED573),
+            Color(0xFF70A1FF),
+            Color(0xFFA29BFE),
+            Color(0xFFFF7675)
+        )
+        List(50) { i ->
+            val startX = Random.nextFloat()
+            val speedY = 0.5f + Random.nextFloat() * 0.8f
+            val swayAmp = 20f + Random.nextFloat() * 30f
+            val swayFreq = 2f + Random.nextFloat() * 4f
+            val color = colors[i % colors.size]
+            val size = 6f + Random.nextFloat() * 6f
+            val type = i % 3
+            RainParticle(startX, speedY, swayAmp, swayFreq, color, size, type, Random.nextFloat() * 360f)
+        }
+    }
+
+    Canvas(
+        modifier = modifier
+            .fillMaxSize()
+            .zIndex(100f)
+    ) {
+        val w = size.width
+        val h = size.height
+
+        rainParticles.forEach { p ->
+            val progress = (time * p.speedY + p.startX) % 1f
+            val y = progress * h
+            val x = (p.startX * w) + sin(progress * p.swayFreq * Math.PI.toFloat()) * p.swayAmp
+            val rot = p.initialRot + progress * 720f
+
+            rotate(degrees = rot, pivot = Offset(x, y)) {
+                when (p.type) {
+                    0 -> {
+                        drawRoundRect(
+                            color = p.color.copy(alpha = 0.90f),
+                            topLeft = Offset(x - p.size, y - p.size * 0.5f),
+                            size = Size(p.size * 2.2f, p.size * 1.1f),
+                            cornerRadius = CornerRadius(2f, 2f)
+                        )
+                    }
+                    1 -> {
+                        drawStar(
+                            center = Offset(x, y),
+                            size = p.size * 2.0f,
+                            color = p.color.copy(alpha = 0.95f)
+                        )
+                    }
+                    else -> {
+                        drawCircle(
+                            color = p.color.copy(alpha = 0.90f),
+                            radius = p.size * 0.9f,
+                            center = Offset(x, y)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class RainParticle(
+    val startX: Float,
+    val speedY: Float,
+    val swayAmp: Float,
+    val swayFreq: Float,
+    val color: Color,
+    val size: Float,
+    val type: Int,
+    val initialRot: Float
+)
+
+fun DrawScope.drawStar(center: Offset, size: Float, color: Color) {
+    val path = Path().apply {
+        val outerRadius = size
+        val innerRadius = size * 0.45f
+        for (i in 0 until 10) {
+            val radius = if (i % 2 == 0) outerRadius else innerRadius
+            val angle = (i * 36 - 90) * (Math.PI / 180.0)
+            val x = center.x + cos(angle).toFloat() * radius
+            val y = center.y + sin(angle).toFloat() * radius
+            if (i == 0) moveTo(x, y) else lineTo(x, y)
+        }
+        close()
+    }
+    drawPath(path, color = color, style = Fill)
+}
+
+fun DrawScope.drawSparkleDiamond(center: Offset, radius: Float, color: Color) {
+    val path = Path().apply {
+        moveTo(center.x, center.y - radius)
+        quadraticBezierTo(center.x, center.y, center.x + radius, center.y)
+        quadraticBezierTo(center.x, center.y, center.x, center.y + radius)
+        quadraticBezierTo(center.x, center.y, center.x - radius, center.y)
+        quadraticBezierTo(center.x, center.y, center.x, center.y - radius)
+        close()
+    }
+    drawPath(path, color = color, style = Fill)
+}
+
+/**
+ * Dancing To-Dodo Chicken holding Credit Score Board with full celebration overlay and synchronized 5-second audio
  */
 @Composable
 fun FullDayChickenCelebrationOverlay(
@@ -102,29 +382,45 @@ fun FullDayChickenCelebrationOverlay(
     milestoneMessage: String,
     onDismiss: () -> Unit
 ) {
-    // Auto-dismiss after 4 seconds if untouched
+    // Start 5-second celebration audio immediately upon entrance
     LaunchedEffect(Unit) {
-        delay(4000)
+        CelebrationSoundHelper.playDailyCelebration()
+        // Auto-dismiss after 5 seconds
+        delay(5000)
+        CelebrationSoundHelper.stopDailyCelebration()
         onDismiss()
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            CelebrationSoundHelper.stopDailyCelebration()
+        }
+    }
+
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            CelebrationSoundHelper.stopDailyCelebration()
+            onDismiss()
+        },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF2D3436).copy(alpha = 0.65f))
+                .background(Color(0xFF2D3436).copy(alpha = 0.70f))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
-                ) { onDismiss() },
+                ) {
+                    CelebrationSoundHelper.stopDailyCelebration()
+                    onDismiss()
+                },
             contentAlignment = Alignment.Center
         ) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.88f)
+                    .zIndex(10f)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -145,25 +441,25 @@ fun FullDayChickenCelebrationOverlay(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "✨", fontSize = 20.sp)
+                        Text(text = "✨", fontSize = 22.sp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "DAY COMPLETE! ♡",
                             style = MaterialTheme.typography.headlineMedium.copy(fontFamily = PatrickHandFontFamily),
                             fontWeight = FontWeight.Bold,
                             color = ToDodoOrange,
-                            fontSize = 26.sp
+                            fontSize = 28.sp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "✨", fontSize = 20.sp)
+                        Text(text = "✨", fontSize = 22.sp)
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    // Dancing Chicken with Credit Score Board
-                    DancingChickenWithBoard(creditScore = creditScore)
+                    // Dancing Official To-Dodo Mascot
+                    DancingOfficialMascot(creditScore = creditScore)
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
                         text = milestoneMessage,
@@ -174,7 +470,7 @@ fun FullDayChickenCelebrationOverlay(
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     Surface(
                         color = ToDodoYellowLight,
@@ -185,17 +481,20 @@ fun FullDayChickenCelebrationOverlay(
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = ToDodoTextDark,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                         )
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
 
                     Button(
-                        onClick = onDismiss,
+                        onClick = {
+                            CelebrationSoundHelper.stopDailyCelebration()
+                            onDismiss()
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(50.dp),
+                            .height(52.dp),
                         shape = RoundedCornerShape(18.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = ToDodoYellow)
                     ) {
@@ -209,51 +508,41 @@ fun FullDayChickenCelebrationOverlay(
                     }
                 }
             }
+
+            // Full Screen Falling Confetti Rain rendered OVER the background and card
+            FullDayConfettiRain(modifier = Modifier.fillMaxSize().zIndex(100f))
         }
     }
 }
 
 /**
- * Animated dancing chicken character holding a board
+ * Dancing animation for the official to-dodo mascot without distorting its appearance.
  */
 @Composable
-fun DancingChickenWithBoard(
+fun DancingOfficialMascot(
     creditScore: Int,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "chickenDance")
+    val infiniteTransition = rememberInfiniteTransition(label = "mascotDance")
 
-    // Rhythmic bounce animation
     val bounceY by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = -16f,
+        targetValue = -12f,
         animationSpec = infiniteRepeatable(
-            animation = tween(400, easing = FastOutSlowInEasing),
+            animation = tween(420, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "bounce"
     )
 
-    // Playful side-to-side wiggle / tilt
     val wiggleAngle by infiniteTransition.animateFloat(
-        initialValue = -7f,
-        targetValue = 7f,
+        initialValue = -5f,
+        targetValue = 5f,
         animationSpec = infiniteRepeatable(
-            animation = tween(450, easing = LinearEasing),
+            animation = tween(480, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "wiggle"
-    )
-
-    // Wing flap scale
-    val wingFlap by infiniteTransition.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(300, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "wingFlap"
     )
 
     Column(
@@ -262,85 +551,18 @@ fun DancingChickenWithBoard(
             .rotate(wiggleAngle),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Chicken graphic
-        Box(
-            modifier = Modifier.size(130.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val w = size.width
-                val h = size.height
-                val strokeW = w * 0.035f
-                val darkBrown = Color(0xFF3E2723)
-                val bodyYellow = Color(0xFFFDCB6E)
-                val blushPink = Color(0xFFFF7675)
-                val beakOrange = Color(0xFFFF9F43)
+        OfficialToDodoMascot(
+            size = 140.dp,
+            showActionLines = true
+        )
 
-                // Chicken main body
-                val bodyPath = Path().apply {
-                    moveTo(w * 0.25f, h * 0.65f)
-                    cubicTo(w * 0.05f, h * 0.50f, w * 0.15f, h * 0.25f, w * 0.40f, h * 0.20f)
-                    cubicTo(w * 0.42f, h * 0.08f, w * 0.58f, h * 0.08f, w * 0.60f, h * 0.20f)
-                    cubicTo(w * 0.85f, h * 0.25f, w * 0.95f, h * 0.50f, w * 0.75f, h * 0.65f)
-                    cubicTo(w * 0.80f, h * 0.85f, w * 0.20f, h * 0.85f, w * 0.25f, h * 0.65f)
-                    close()
-                }
-                drawPath(bodyPath, color = bodyYellow)
-                drawPath(bodyPath, color = darkBrown, style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        Spacer(modifier = Modifier.height(8.dp))
 
-                // Left Wing (Flapping)
-                val leftWing = Path().apply {
-                    moveTo(w * 0.18f, h * 0.45f)
-                    cubicTo(w * 0.02f, h * 0.35f * wingFlap, w * 0.02f, h * 0.65f * wingFlap, w * 0.22f, h * 0.60f)
-                }
-                drawPath(leftWing, color = bodyYellow)
-                drawPath(leftWing, color = darkBrown, style = Stroke(width = strokeW, cap = StrokeCap.Round))
-
-                // Right Wing (Flapping)
-                val rightWing = Path().apply {
-                    moveTo(w * 0.82f, h * 0.45f)
-                    cubicTo(w * 0.98f, h * 0.35f * wingFlap, w * 0.98f, h * 0.65f * wingFlap, w * 0.78f, h * 0.60f)
-                }
-                drawPath(rightWing, color = bodyYellow)
-                drawPath(rightWing, color = darkBrown, style = Stroke(width = strokeW, cap = StrokeCap.Round))
-
-                // Happy Eyes (^ ^)
-                val eye1 = Path().apply {
-                    moveTo(w * 0.32f, h * 0.40f)
-                    lineTo(w * 0.38f, h * 0.33f)
-                    lineTo(w * 0.44f, h * 0.40f)
-                }
-                drawPath(eye1, color = darkBrown, style = Stroke(width = strokeW * 0.9f, cap = StrokeCap.Round))
-
-                val eye2 = Path().apply {
-                    moveTo(w * 0.56f, h * 0.40f)
-                    lineTo(w * 0.62f, h * 0.33f)
-                    lineTo(w * 0.68f, h * 0.40f)
-                }
-                drawPath(eye2, color = darkBrown, style = Stroke(width = strokeW * 0.9f, cap = StrokeCap.Round))
-
-                // Blushes
-                drawCircle(color = blushPink.copy(alpha = 0.6f), radius = w * 0.06f, center = Offset(w * 0.28f, h * 0.48f))
-                drawCircle(color = blushPink.copy(alpha = 0.6f), radius = w * 0.06f, center = Offset(w * 0.72f, h * 0.48f))
-
-                // Beak
-                drawOval(color = beakOrange, topLeft = Offset(w * 0.44f, h * 0.41f), size = Size(w * 0.12f, h * 0.08f))
-                drawOval(color = darkBrown, topLeft = Offset(w * 0.44f, h * 0.41f), size = Size(w * 0.12f, h * 0.08f), style = Stroke(width = strokeW * 0.8f))
-
-                // Little feet
-                drawLine(color = darkBrown, start = Offset(w * 0.38f, h * 0.85f), end = Offset(w * 0.38f, h * 0.94f), strokeWidth = strokeW * 0.9f, cap = StrokeCap.Round)
-                drawLine(color = darkBrown, start = Offset(w * 0.62f, h * 0.85f), end = Offset(w * 0.62f, h * 0.94f), strokeWidth = strokeW * 0.9f, cap = StrokeCap.Round)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Credit Score Board held by the chicken
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = ToDodoYellow),
-            border = BorderStroke(2.dp, Color(0xFF3E2723)),
-            modifier = Modifier.width(150.dp)
+            border = BorderStroke(2.dp, Color(0xFF2E1C14)),
+            modifier = Modifier.width(160.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -352,7 +574,7 @@ fun DancingChickenWithBoard(
                     text = "CREDIT SCORE",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFF3E2723),
+                    color = Color(0xFF2E1C14),
                     letterSpacing = 1.sp
                 )
                 Text(
@@ -360,7 +582,7 @@ fun DancingChickenWithBoard(
                     style = MaterialTheme.typography.displaySmall.copy(fontFamily = PatrickHandFontFamily),
                     fontWeight = FontWeight.Bold,
                     fontSize = 32.sp,
-                    color = Color(0xFF3E2723)
+                    color = Color(0xFF2E1C14)
                 )
             }
         }

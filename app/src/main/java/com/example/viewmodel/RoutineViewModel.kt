@@ -8,13 +8,25 @@ import com.example.data.db.CompletionRecordEntity
 import com.example.data.db.CreditAwardEntity
 import com.example.data.db.TaskEntity
 import com.example.data.preferences.SettingsManager
+import com.example.data.quotes.MotivationalQuote
+import com.example.data.quotes.MotivationalQuoteEngine
+import com.example.data.quotes.MotivationalQuoteLibrary
+import com.example.data.quotes.QuoteContext
 import com.example.data.repository.RoutineRepository
+import com.example.util.CategoryHelper
+import com.example.util.NotificationHelper
+import com.example.util.RoutineNotificationScheduler
+import com.example.util.RoutineTimeEngine
+import com.example.widget.ToDodoWidgetProvider
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.format.TextStyle
 import java.util.*
 
@@ -29,14 +41,10 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     private val repository = RoutineRepository(database.routineDao())
     private val settingsManager = SettingsManager(application)
 
-    // Helper: Compute logical date for routine tracking (times 00:00-03:59 belong to previous night's routine)
+    // Companion delegation to central RoutineTimeEngine
     companion object {
         fun getLogicalDate(now: LocalDateTime = LocalDateTime.now()): LocalDate {
-            return if (now.hour < 4) {
-                now.toLocalDate().minusDays(1)
-            } else {
-                now.toLocalDate()
-            }
+            return RoutineTimeEngine.getLogicalDate(now)
         }
     }
 
@@ -50,14 +58,52 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     val notificationsEnabled: StateFlow<Boolean> = settingsManager.notificationsEnabledFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), true
     )
+    val taskRemindersEnabled: StateFlow<Boolean> = settingsManager.taskRemindersEnabledFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+    val upcomingTaskEnabled: StateFlow<Boolean> = settingsManager.upcomingTaskEnabledFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), false
+    )
+    val morningSummaryEnabled: StateFlow<Boolean> = settingsManager.morningSummaryEnabledFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), false
+    )
+    val reminderTimingMinutes: StateFlow<Int> = settingsManager.reminderTimingMinutesFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), 10
+    )
+    val morningSummaryTime: StateFlow<String> = settingsManager.morningSummaryTimeFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), "08:00"
+    )
     val weekStartsMonday: StateFlow<Boolean> = settingsManager.weekStartsMondayFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), true
     )
     val onboardingCompleted: StateFlow<Boolean> = settingsManager.onboardingCompletedFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), false
     )
+    val customCategories: StateFlow<List<String>> = settingsManager.customCategoriesFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+    val allAvailableCategories: StateFlow<List<String>> = customCategories.map { customs ->
+        CategoryHelper.DEFAULT_CATEGORIES + customs
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CategoryHelper.DEFAULT_CATEGORIES)
 
-    // Selected Date for viewing/tracking (defaults to logical date)
+    // Time & Date Engine reactive flows
+    private val _currentTimeTick = MutableStateFlow(LocalDateTime.now())
+    val currentTimeTick: StateFlow<LocalDateTime> = _currentTimeTick.asStateFlow()
+
+    // Flag tracking if the user is viewing today's live routine
+    private val _isViewingCurrentLogicalDate = MutableStateFlow(true)
+
+    val actualDate: StateFlow<LocalDate> = _currentTimeTick.map { it.toLocalDate() }.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), LocalDate.now()
+    )
+
+    val currentGreeting: StateFlow<RoutineTimeEngine.GreetingInfo> = _currentTimeTick.map {
+        RoutineTimeEngine.getGreetingInfo(it.toLocalTime())
+    }.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), RoutineTimeEngine.getGreetingInfo()
+    )
+
+    // Selected Date for viewing/tracking (defaults to current logical date)
     private val _selectedDate = MutableStateFlow(getLogicalDate().toString())
     val selectedDate: StateFlow<String> = _selectedDate
 
@@ -85,9 +131,26 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     private val _fullDayCelebrationEvent = MutableStateFlow<FullDayCelebrationData?>(null)
     val fullDayCelebrationEvent: StateFlow<FullDayCelebrationData?> = _fullDayCelebrationEvent
 
+    // Local Motivational Quote (Phase 4)
+    private val _currentMotivationalQuote = MutableStateFlow<MotivationalQuote>(
+        MotivationalQuoteLibrary.quotes.first()
+    )
+    val currentMotivationalQuote: StateFlow<MotivationalQuote> = _currentMotivationalQuote.asStateFlow()
+
     init {
         viewModelScope.launch {
-            repository.ensureDefaultTasksSeeded()
+            val isOnboardingDone = settingsManager.onboardingCompletedFlow.first()
+            val taskCount = repository.getTaskCount()
+            val completionCount = repository.getAllCompletions().first().size
+            val creditCount = repository.getCreditScoreCount().first()
+
+            val hasExistingData = (taskCount > 0 || completionCount > 0 || creditCount > 0)
+            if (hasExistingData && !isOnboardingDone) {
+                // Existing user from Phase 1 or 2 upgrading to Phase 3:
+                // Auto-mark onboarding as completed so they are never interrupted!
+                settingsManager.setOnboardingCompleted(true)
+                settingsManager.setRoutineSetupCompleted(true)
+            }
         }
         viewModelScope.launch {
             repository.getAllTasks().collect { tasks ->
@@ -99,9 +162,83 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 _allCompletions.value = comps
             }
         }
+        viewModelScope.launch {
+            refreshMotivationalQuote(forceNew = false)
+        }
+        viewModelScope.launch {
+            RoutineNotificationScheduler.scheduleNotifications(getApplication())
+        }
+        // Battery-efficient minute ticker aligned to the top of each minute
+        viewModelScope.launch {
+            while (isActive) {
+                val nowTime = LocalTime.now()
+                val millisUntilNextMinute = (60 - nowTime.second) * 1000L - (nowTime.nano / 1_000_000L) + 50L
+                delay(millisUntilNextMinute.coerceAtLeast(500L))
+                refreshTime()
+            }
+        }
+    }
+
+    fun refreshTime() {
+        val now = LocalDateTime.now()
+        _currentTimeTick.value = now
+        val logicalDateStr = RoutineTimeEngine.getLogicalDate(now).toString()
+        // If user is tracking current logical day, auto-update on date / 4am boundaries
+        if (_isViewingCurrentLogicalDate.value && _selectedDate.value != logicalDateStr) {
+            _selectedDate.value = logicalDateStr
+            refreshMotivationalQuote(forceNew = false)
+        }
+        try {
+            ToDodoWidgetProvider.updateWidgets(getApplication())
+        } catch (e: Exception) {
+            // Safe fallback
+        }
+    }
+
+    fun refreshMotivationalQuote(forceNew: Boolean = true) {
+        viewModelScope.launch {
+            val currentLogicalDateStr = RoutineTimeEngine.getLogicalDate().toString()
+            val recentIds = settingsManager.recentQuoteIdsFlow.first()
+            val totalTasks = todayProgress.value.total
+            val completedTasks = todayProgress.value.completed
+            val is100Percent = totalTasks > 0 && completedTasks >= totalTasks
+            val curCategory = routineStatus.value.currentTask?.category
+            val isFree = tasksForSelectedDate.value.isEmpty()
+            val timeContext = MotivationalQuoteEngine.getTimeContext(LocalTime.now().hour)
+
+            val context = QuoteContext(
+                is100PercentComplete = is100Percent,
+                currentTaskCategory = curCategory,
+                isFreeDay = isFree,
+                timeOfDay = timeContext
+            )
+
+            if (!forceNew) {
+                val savedId = settingsManager.selectedQuoteIdFlow.first()
+                val savedDate = settingsManager.selectedQuoteDateFlow.first()
+                if (savedDate == currentLogicalDateStr && savedId != null) {
+                    val existing = MotivationalQuoteLibrary.getById(savedId)
+                    if (existing != null) {
+                        _currentMotivationalQuote.value = existing
+                        return@launch
+                    }
+                }
+            }
+
+            val seed = System.currentTimeMillis()
+            val newQuote = MotivationalQuoteEngine.selectQuote(
+                context = context,
+                recentQuoteIds = recentIds,
+                seed = seed
+            )
+            _currentMotivationalQuote.value = newQuote
+            settingsManager.saveSelectedQuote(newQuote.id, currentLogicalDateStr)
+        }
     }
 
     fun setSelectedDate(dateStr: String) {
+        val currentLogicalStr = RoutineTimeEngine.getLogicalDate().toString()
+        _isViewingCurrentLogicalDate.value = (dateStr == currentLogicalStr)
         _selectedDate.value = dateStr
     }
 
@@ -122,11 +259,25 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         try {
             val date = LocalDate.parse(dateStr)
             val dayName = date.dayOfWeek.name
-            tasks.filter { it.dayOfWeek.uppercase() == dayName }.sortedBy { it.sortOrder }
+            tasks.filter { task ->
+                task.isEffectiveOn(dateStr) && task.repeatsOn(dayName)
+            }.sortedWith(compareBy({ RoutineTimeEngine.toLogicalMinutes(it.startTime) }, { it.sortOrder }))
         } catch (e: Exception) {
             emptyList()
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Real-time Routine Status (CURRENT_TASK, BETWEEN_TASKS, BEFORE_FIRST_TASK, AFTER_LAST_TASK, NO_TASKS_TODAY)
+    val routineStatus: StateFlow<RoutineTimeEngine.RoutineStatusInfo> = combine(
+        tasksForSelectedDate,
+        _currentTimeTick
+    ) { tasks, now ->
+        RoutineTimeEngine.calculateRoutineStatus(tasks, now)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        RoutineTimeEngine.calculateRoutineStatus(emptyList())
+    )
 
     // Completions for the currently selected date
     val completionsForSelectedDate: StateFlow<Map<String, Boolean>> = combine(_allCompletions, _selectedDate) { comps, dateStr ->
@@ -144,7 +295,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         val tasks = _allTasks.value.filter { task ->
             try {
                 val d = LocalDate.parse(dateStr)
-                task.dayOfWeek.uppercase() == d.dayOfWeek.name
+                task.isEffectiveOn(dateStr) && task.repeatsOn(d.dayOfWeek.name)
             } catch (e: Exception) {
                 false
             }
@@ -174,6 +325,10 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                     )
                 )
 
+                // Cancel pending reminder for this completed task
+                RoutineNotificationScheduler.cancelTaskReminder(getApplication(), taskId, targetDate)
+                NotificationHelper.cancelTaskNotification(getApplication(), taskId)
+
                 // Trigger individual party popper animation
                 _partyPopperTaskId.value = taskId
 
@@ -181,7 +336,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 val tasksForDay = _allTasks.value.filter { task ->
                     try {
                         val d = LocalDate.parse(targetDate)
-                        task.dayOfWeek.uppercase() == d.dayOfWeek.name
+                        task.isEffectiveOn(targetDate) && task.repeatsOn(d.dayOfWeek.name)
                     } catch (e: Exception) {
                         false
                     }
@@ -215,6 +370,8 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
             } else {
                 repository.deleteCompletion(targetDate, taskId)
             }
+            // Update widget asynchronously
+            ToDodoWidgetProvider.updateWidgets(getApplication())
         }
     }
 
@@ -243,18 +400,23 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         val todayProg = getProgressForDate(currentDate.toString())
         if (todayProg.total > 0 && todayProg.percentage >= 70) {
             streak++
-            currentDate = currentDate.minusDays(1)
-        } else {
-            currentDate = currentDate.minusDays(1)
         }
+        currentDate = currentDate.minusDays(1)
 
-        while (true) {
+        val oldestLimit = getLogicalDate().minusYears(1)
+        while (currentDate.isAfter(oldestLimit)) {
             val dateStr = currentDate.toString()
             val prog = getProgressForDate(dateStr)
-            if (prog.total > 0 && prog.percentage >= 70) {
+            if (prog.total == 0) {
+                // Free day (0 tasks): skip backward without breaking streak and without incrementing
+                currentDate = currentDate.minusDays(1)
+                continue
+            }
+            if (prog.percentage >= 70) {
                 streak++
                 currentDate = currentDate.minusDays(1)
             } else {
+                // Non-empty day with < 70% completed: streak breaks
                 break
             }
         }
@@ -305,7 +467,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SessionStats(0,0,0,0,0,0,0))
 
-    // Category progress across all 10 categories
+    // Category progress across universal defaults and custom categories
     data class CategoryProgress(
         val category: String,
         val completedCount: Int,
@@ -313,18 +475,21 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         val percentage: Int
     )
 
-    val categoryProgressList: StateFlow<List<CategoryProgress>> = combine(_allTasks, _allCompletions) { tasks, comps ->
-        val allCategories = listOf(
-            "Study", "College", "Project / Internship", "Exercise",
-            "Guitar", "Flute", "Reading", "Personal", "Rest", "Other"
-        )
+    val categoryProgressList: StateFlow<List<CategoryProgress>> = combine(
+        _allTasks,
+        _allCompletions,
+        settingsManager.customCategoriesFlow
+    ) { tasks, comps, customCats ->
+        val allCategories = CategoryHelper.DEFAULT_CATEGORIES + customCats
         val taskMap = tasks.associateBy { it.id }
 
         allCategories.map { cat ->
-            val weeklyTasksForCat = tasks.filter { it.category.equals(cat, ignoreCase = true) }
+            val weeklyTasksForCat = tasks.filter {
+                CategoryHelper.mapLegacyCategory(it.category).equals(cat, ignoreCase = true)
+            }
             val completedCount = comps.count { comp ->
                 val task = taskMap[comp.taskId]
-                task != null && task.category.equals(cat, ignoreCase = true) && comp.completed
+                task != null && CategoryHelper.mapLegacyCategory(task.category).equals(cat, ignoreCase = true) && comp.completed
             }
             val weeklyTotal = weeklyTasksForCat.size
             val percentage = if (weeklyTotal > 0) {
@@ -340,6 +505,36 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun addCustomCategory(name: String, onResult: (Boolean, String?) -> Unit = { _, _ -> }) {
+        val validationError = CategoryHelper.validateCategoryName(name, customCategories.value)
+        if (validationError != null) {
+            onResult(false, validationError)
+            return
+        }
+        viewModelScope.launch {
+            val success = settingsManager.addCustomCategory(name.trim())
+            if (success) {
+                onResult(true, null)
+            } else {
+                onResult(false, "Category already exists")
+            }
+        }
+    }
+
+    fun deleteCustomCategory(categoryName: String, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            // Reassign affected tasks to "Other" safely
+            val tasksWithCat = _allTasks.value.filter { it.category.equals(categoryName, ignoreCase = true) }
+            for (task in tasksWithCat) {
+                repository.updateTask(task.copy(category = "Other"))
+            }
+            val currentCustoms = settingsManager.getCustomCategories()
+            val updated = currentCustoms.filterNot { it.equals(categoryName, ignoreCase = true) }
+            settingsManager.setCustomCategories(updated)
+            onResult(true)
+        }
+    }
 
     // Week days breakdown for selected week offset
     data class DayProgressSummary(
@@ -389,7 +584,45 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun setNotificationsEnabled(enabled: Boolean) {
-        viewModelScope.launch { settingsManager.setNotificationsEnabled(enabled) }
+        viewModelScope.launch {
+            settingsManager.setNotificationsEnabled(enabled)
+            RoutineNotificationScheduler.scheduleNotifications(getApplication())
+        }
+    }
+
+    fun setTaskRemindersEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setTaskRemindersEnabled(enabled)
+            RoutineNotificationScheduler.scheduleNotifications(getApplication())
+        }
+    }
+
+    fun setUpcomingTaskEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setUpcomingTaskEnabled(enabled)
+            RoutineNotificationScheduler.scheduleNotifications(getApplication())
+        }
+    }
+
+    fun setMorningSummaryEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setMorningSummaryEnabled(enabled)
+            RoutineNotificationScheduler.scheduleNotifications(getApplication())
+        }
+    }
+
+    fun setReminderTimingMinutes(minutes: Int) {
+        viewModelScope.launch {
+            settingsManager.setReminderTimingMinutes(minutes)
+            RoutineNotificationScheduler.scheduleNotifications(getApplication())
+        }
+    }
+
+    fun setMorningSummaryTime(time: String) {
+        viewModelScope.launch {
+            settingsManager.setMorningSummaryTime(time)
+            RoutineNotificationScheduler.scheduleNotifications(getApplication())
+        }
     }
 
     fun setWeekStartsMonday(startsMonday: Boolean) {
@@ -407,18 +640,137 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    // --- Task Customization Methods (Phase 2) ---
+
+    fun addCustomTask(
+        title: String,
+        category: String,
+        startTime: String,
+        endTime: String,
+        daysOfWeek: Set<String>,
+        reminderEnabled: Boolean = true
+    ) {
+        viewModelScope.launch {
+            val nextLogicalDate = RoutineTimeEngine.getLogicalDate().plusDays(1).toString()
+            val taskId = "TASK_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
+            val primaryDay = daysOfWeek.firstOrNull() ?: "MONDAY"
+            val daysStr = daysOfWeek.joinToString(",")
+            val sortOrder = RoutineTimeEngine.toLogicalMinutes(startTime)
+
+            val newTask = TaskEntity(
+                id = taskId,
+                dayOfWeek = primaryDay,
+                title = title.trim(),
+                startTime = startTime.trim(),
+                endTime = endTime.trim(),
+                category = category.trim(),
+                sortOrder = sortOrder,
+                daysOfWeek = daysStr,
+                isEnabled = true,
+                reminderEnabled = reminderEnabled,
+                effectiveFromDate = nextLogicalDate,
+                effectiveUntilDate = null
+            )
+            repository.insertTask(newTask)
+            ToDodoWidgetProvider.updateWidgets(getApplication())
+            RoutineNotificationScheduler.scheduleNotifications(getApplication())
+        }
+    }
+
+    fun editCustomTask(
+        existingTask: TaskEntity,
+        newTitle: String,
+        newCategory: String,
+        newStartTime: String,
+        newEndTime: String,
+        newDaysOfWeek: Set<String>,
+        newReminderEnabled: Boolean
+    ) {
+        viewModelScope.launch {
+            val currentLogicalDate = RoutineTimeEngine.getLogicalDate().toString()
+            val nextLogicalDate = RoutineTimeEngine.getLogicalDate().plusDays(1).toString()
+            val primaryDay = newDaysOfWeek.firstOrNull() ?: existingTask.dayOfWeek
+            val newDaysStr = newDaysOfWeek.joinToString(",")
+            val newSortOrder = RoutineTimeEngine.toLogicalMinutes(newStartTime)
+
+            // Archive the existing schedule version up to today (preserving historical schedule)
+            repository.updateTask(existingTask.copy(effectiveUntilDate = currentLogicalDate))
+
+            // Create updated version starting next logical day
+            val updatedTask = TaskEntity(
+                id = "${existingTask.id}_v${System.currentTimeMillis().toString().takeLast(5)}",
+                dayOfWeek = primaryDay,
+                title = newTitle.trim(),
+                startTime = newStartTime.trim(),
+                endTime = newEndTime.trim(),
+                category = newCategory.trim(),
+                sortOrder = newSortOrder,
+                daysOfWeek = newDaysStr,
+                isEnabled = existingTask.isEnabled,
+                reminderEnabled = newReminderEnabled,
+                effectiveFromDate = nextLogicalDate,
+                effectiveUntilDate = null
+            )
+            repository.insertTask(updatedTask)
+            ToDodoWidgetProvider.updateWidgets(getApplication())
+            RoutineNotificationScheduler.scheduleNotifications(getApplication())
+        }
+    }
+
+    fun deleteCustomTask(task: TaskEntity) {
+        viewModelScope.launch {
+            val currentLogicalDate = RoutineTimeEngine.getLogicalDate().toString()
+            // Setting effectiveUntilDate = currentLogicalDate preserves past completions while removing from future schedule
+            repository.updateTask(task.copy(effectiveUntilDate = currentLogicalDate))
+            NotificationHelper.cancelTaskNotification(getApplication(), task.id)
+            RoutineNotificationScheduler.cancelTaskReminder(getApplication(), task.id, currentLogicalDate)
+            ToDodoWidgetProvider.updateWidgets(getApplication())
+            RoutineNotificationScheduler.scheduleNotifications(getApplication())
+        }
+    }
+
+    fun toggleTaskEnabled(taskId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            val task = repository.getTaskById(taskId) ?: return@launch
+            repository.updateTask(task.copy(isEnabled = enabled))
+            if (!enabled) {
+                NotificationHelper.cancelTaskNotification(getApplication(), taskId)
+            }
+            ToDodoWidgetProvider.updateWidgets(getApplication())
+            RoutineNotificationScheduler.scheduleNotifications(getApplication())
+        }
+    }
+
+    fun loadStarterRoutine() {
+        viewModelScope.launch {
+            repository.loadStarterRoutine()
+            settingsManager.setRoutineSetupCompleted(true)
+            ToDodoWidgetProvider.updateWidgets(getApplication())
+        }
+    }
+
+    fun clearRoutineForCustom() {
+        viewModelScope.launch {
+            repository.clearAllTasks()
+            settingsManager.setRoutineSetupCompleted(true)
+            ToDodoWidgetProvider.updateWidgets(getApplication())
+        }
+    }
+
     fun clearAllProgress() {
         viewModelScope.launch {
             repository.clearAllCompletions()
             repository.clearAllCreditAwards()
+            ToDodoWidgetProvider.updateWidgets(getApplication())
         }
     }
 
-    // Export Data to JSON string
+    // Export Data to JSON string (supporting both completion history and custom routine tasks)
     fun exportDataJson(): String {
         val root = JSONObject()
-        root.put("version", 2)
+        root.put("version", 3)
         root.put("appName", "to-dodo")
+        root.put("userName", userName.value)
         root.put("exportedAt", System.currentTimeMillis())
 
         val compsArray = JSONArray()
@@ -433,6 +785,33 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
             compsArray.put(obj)
         }
         root.put("completionRecords", compsArray)
+
+        val tasksArray = JSONArray()
+        for (task in _allTasks.value) {
+            val obj = JSONObject().apply {
+                put("id", task.id)
+                put("dayOfWeek", task.dayOfWeek)
+                put("title", task.title)
+                put("startTime", task.startTime)
+                put("endTime", task.endTime)
+                put("category", task.category)
+                put("sortOrder", task.sortOrder)
+                put("daysOfWeek", task.daysOfWeek)
+                put("isEnabled", task.isEnabled)
+                put("reminderEnabled", task.reminderEnabled)
+                put("effectiveFromDate", task.effectiveFromDate)
+                put("effectiveUntilDate", task.effectiveUntilDate ?: JSONObject.NULL)
+            }
+            tasksArray.put(obj)
+        }
+        root.put("tasks", tasksArray)
+
+        val customCatsArray = JSONArray()
+        for (cat in customCategories.value) {
+            customCatsArray.put(cat)
+        }
+        root.put("customCategories", customCatsArray)
+
         return root.toString(2)
     }
 
@@ -467,11 +846,68 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 )
             }
 
+            val newTasks = mutableListOf<TaskEntity>()
+            if (root.has("tasks")) {
+                val tasksArray = root.getJSONArray("tasks")
+                for (i in 0 until tasksArray.length()) {
+                    val obj = tasksArray.getJSONObject(i)
+                    val id = obj.getString("id")
+                    val title = obj.getString("title")
+                    val dayOfWeek = obj.optString("dayOfWeek", "MONDAY")
+                    val startTime = obj.optString("startTime", "09:00")
+                    val endTime = obj.optString("endTime", "10:00")
+                    val category = obj.optString("category", "Personal")
+                    val sortOrder = obj.optInt("sortOrder", 0)
+                    val daysOfWeek = obj.optString("daysOfWeek", dayOfWeek)
+                    val isEnabled = obj.optBoolean("isEnabled", true)
+                    val reminderEnabled = obj.optBoolean("reminderEnabled", true)
+                    val effectiveFromDate = obj.optString("effectiveFromDate", "2000-01-01")
+                    val effectiveUntilDate = if (obj.isNull("effectiveUntilDate")) null else obj.optString("effectiveUntilDate")
+
+                    newTasks.add(
+                        TaskEntity(
+                            id = id,
+                            dayOfWeek = dayOfWeek,
+                            title = title,
+                            startTime = startTime,
+                            endTime = endTime,
+                            category = category,
+                            sortOrder = sortOrder,
+                            daysOfWeek = daysOfWeek,
+                            isEnabled = isEnabled,
+                            reminderEnabled = reminderEnabled,
+                            effectiveFromDate = effectiveFromDate,
+                            effectiveUntilDate = effectiveUntilDate
+                        )
+                    )
+                }
+            }
+
             viewModelScope.launch {
+                if (root.has("userName")) {
+                    val importedName = root.getString("userName")
+                    if (importedName.isNotBlank()) {
+                        settingsManager.setUserName(importedName.trim())
+                    }
+                }
+                if (root.has("customCategories")) {
+                    val catArray = root.getJSONArray("customCategories")
+                    val importedCats = mutableListOf<String>()
+                    for (i in 0 until catArray.length()) {
+                        val cat = catArray.getString(i)
+                        if (cat.isNotBlank()) importedCats.add(cat.trim())
+                    }
+                    settingsManager.setCustomCategories(importedCats)
+                }
                 repository.clearAllCompletions()
                 for (rec in newRecords) {
                     repository.upsertCompletion(rec)
                 }
+                if (newTasks.isNotEmpty()) {
+                    repository.clearAllTasks()
+                    repository.insertTasks(newTasks)
+                }
+                ToDodoWidgetProvider.updateWidgets(getApplication())
             }
             return true
         } catch (e: Exception) {

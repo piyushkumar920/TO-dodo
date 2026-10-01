@@ -32,17 +32,25 @@ import com.example.viewmodel.RoutineViewModel
 @Composable
 fun SettingsScreen(
     viewModel: RoutineViewModel,
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    onOpenRoutine: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val currentTheme by viewModel.theme.collectAsState()
     val userName by viewModel.userName.collectAsState()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
+    val taskRemindersEnabled by viewModel.taskRemindersEnabled.collectAsState()
+    val upcomingTaskEnabled by viewModel.upcomingTaskEnabled.collectAsState()
+    val morningSummaryEnabled by viewModel.morningSummaryEnabled.collectAsState()
+    val reminderTimingMinutes by viewModel.reminderTimingMinutes.collectAsState()
+    val morningSummaryTime by viewModel.morningSummaryTime.collectAsState()
 
     var showClearConfirm by remember { mutableStateOf(false) }
     var showResetTodayConfirm by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showEditNameDialog by remember { mutableStateOf(false) }
+    var showReminderTimingDialog by remember { mutableStateOf(false) }
+    var showMorningSummaryTimeDialog by remember { mutableStateOf(false) }
     var nameInput by remember { mutableStateOf(userName) }
 
     // Permission launcher for Android 13+
@@ -142,6 +150,28 @@ fun SettingsScreen(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
+                        // My Routine Row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenRoutine() }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.CalendarMonth, contentDescription = "My Routine", tint = ToDodoOrange)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(text = "My Routine", style = MaterialTheme.typography.titleMedium)
+                                    Text(text = "Customize weekly tasks & schedule", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = "Open Routine", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+
                         // Edit Name Row
                         Row(
                             modifier = Modifier
@@ -187,9 +217,31 @@ fun SettingsScreen(
                             Icon(Icons.Default.ChevronRight, contentDescription = "Select Theme", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
 
-                        Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                    }
+                }
+            }
 
-                        // Notifications Switch Row
+            // Section: Notifications
+            item {
+                Text(
+                    text = "Notifications",
+                    style = MaterialTheme.typography.titleLarge.copy(fontFamily = PatrickHandFontFamily),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Notifications Master Switch Row
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -202,7 +254,7 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(text = "Notifications", style = MaterialTheme.typography.titleMedium)
-                                    Text(text = "Local routine reminders", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(text = "Local routine alerts", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             Switch(
@@ -216,6 +268,118 @@ fun SettingsScreen(
                                 },
                                 modifier = Modifier.testTag("notifications_switch")
                             )
+                        }
+
+                        if (notificationsEnabled) {
+                            Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                            // Task Reminders Row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(text = "Task reminders", style = MaterialTheme.typography.titleMedium)
+                                    Text(text = "Remind before scheduled tasks", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Switch(
+                                    checked = taskRemindersEnabled,
+                                    onCheckedChange = { viewModel.setTaskRemindersEnabled(it) },
+                                    modifier = Modifier.testTag("task_reminders_switch")
+                                )
+                            }
+
+                            Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                            // Upcoming Task Row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(text = "Upcoming task", style = MaterialTheme.typography.titleMedium)
+                                    Text(text = "Alert for next scheduled task", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Switch(
+                                    checked = upcomingTaskEnabled,
+                                    onCheckedChange = { viewModel.setUpcomingTaskEnabled(it) },
+                                    modifier = Modifier.testTag("upcoming_task_switch")
+                                )
+                            }
+
+                            Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                            // Morning Summary Row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(text = "Morning summary", style = MaterialTheme.typography.titleMedium)
+                                    Text(text = "Daily morning overview of planned tasks", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Switch(
+                                    checked = morningSummaryEnabled,
+                                    onCheckedChange = { viewModel.setMorningSummaryEnabled(it) },
+                                    modifier = Modifier.testTag("morning_summary_switch")
+                                )
+                            }
+
+                            Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                            // Reminder Timing Selector Row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showReminderTimingDialog = true }
+                                    .padding(16.dp)
+                                    .testTag("reminder_timing_row"),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text(text = "Reminder timing", style = MaterialTheme.typography.titleMedium)
+                                    val timingText = if (reminderTimingMinutes <= 0) "At task start" else "$reminderTimingMinutes minutes before"
+                                    Text(text = timingText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                }
+                                Icon(Icons.Default.ChevronRight, contentDescription = "Select Reminder Timing", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+
+                            Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                            // Morning Summary Time Selector Row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showMorningSummaryTimeDialog = true }
+                                    .padding(16.dp)
+                                    .testTag("morning_summary_time_row"),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text(text = "Morning summary time", style = MaterialTheme.typography.titleMedium)
+                                    val summaryTimeFormatted = when (morningSummaryTime) {
+                                        "07:00" -> "7:00 AM"
+                                        "07:30" -> "7:30 AM"
+                                        "08:00" -> "8:00 AM"
+                                        "08:30" -> "8:30 AM"
+                                        "09:00" -> "9:00 AM"
+                                        else -> morningSummaryTime
+                                    }
+                                    Text(text = summaryTimeFormatted, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                }
+                                Icon(Icons.Default.ChevronRight, contentDescription = "Select Summary Time", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
@@ -503,6 +667,98 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showClearConfirm = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Reminder Timing Dialog
+    if (showReminderTimingDialog) {
+        val timingOptions = listOf(
+            0 to "At task start",
+            5 to "5 minutes before",
+            10 to "10 minutes before",
+            15 to "15 minutes before",
+            30 to "30 minutes before"
+        )
+        AlertDialog(
+            onDismissRequest = { showReminderTimingDialog = false },
+            title = { Text("Reminder Timing", style = MaterialTheme.typography.titleLarge.copy(fontFamily = PatrickHandFontFamily), fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    timingOptions.forEach { (minutes, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.setReminderTimingMinutes(minutes)
+                                    showReminderTimingDialog = false
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = (reminderTimingMinutes == minutes),
+                                onClick = {
+                                    viewModel.setReminderTimingMinutes(minutes)
+                                    showReminderTimingDialog = false
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = label, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showReminderTimingDialog = false }) {
+                    Text("Done")
+                }
+            }
+        )
+    }
+
+    // Morning Summary Time Dialog
+    if (showMorningSummaryTimeDialog) {
+        val timeOptions = listOf(
+            "07:00" to "7:00 AM",
+            "07:30" to "7:30 AM",
+            "08:00" to "8:00 AM",
+            "08:30" to "8:30 AM",
+            "09:00" to "9:00 AM"
+        )
+        AlertDialog(
+            onDismissRequest = { showMorningSummaryTimeDialog = false },
+            title = { Text("Morning Summary Time", style = MaterialTheme.typography.titleLarge.copy(fontFamily = PatrickHandFontFamily), fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    timeOptions.forEach { (timeStr, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.setMorningSummaryTime(timeStr)
+                                    showMorningSummaryTimeDialog = false
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = (morningSummaryTime == timeStr),
+                                onClick = {
+                                    viewModel.setMorningSummaryTime(timeStr)
+                                    showMorningSummaryTimeDialog = false
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = label, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showMorningSummaryTimeDialog = false }) {
+                    Text("Done")
                 }
             }
         )

@@ -24,8 +24,24 @@ class RoutineRepository(private val dao: RoutineDao) {
     suspend fun deleteCompletionsForDate(date: String) = dao.deleteCompletionsForDate(date)
     suspend fun clearAllCompletions() = dao.clearAllCompletions()
 
+    suspend fun getTaskCount(): Int = dao.getTaskCount()
+    suspend fun getTaskById(id: String): TaskEntity? = dao.getTaskById(id)
+    suspend fun insertTask(task: TaskEntity) = dao.insertTask(task)
+    suspend fun insertTasks(tasks: List<TaskEntity>) = dao.insertTasks(tasks)
+    suspend fun updateTask(task: TaskEntity) = dao.updateTask(task)
+    suspend fun deleteTask(task: TaskEntity) = dao.deleteTask(task)
+    suspend fun deleteTaskById(id: String) = dao.deleteTaskById(id)
+    suspend fun clearAllTasks() = dao.clearAllTasks()
+
     suspend fun ensureDefaultTasksSeeded() {
-        // We can check if any tasks exist by seeding default list
+        if (dao.getTaskCount() == 0) {
+            val defaultTasks = getDefaultTasks()
+            dao.insertTasks(defaultTasks)
+        }
+    }
+
+    suspend fun loadStarterRoutine() {
+        dao.clearAllTasks()
         val defaultTasks = getDefaultTasks()
         dao.insertTasks(defaultTasks)
     }

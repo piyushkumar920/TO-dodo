@@ -27,7 +27,8 @@ import com.example.viewmodel.RoutineViewModel
 @Composable
 fun ProfileScreen(
     viewModel: RoutineViewModel,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenRoutine: () -> Unit = {}
 ) {
     val userName by viewModel.userName.collectAsState()
     val currentStreak by viewModel.currentStreak.collectAsState()
@@ -153,6 +154,12 @@ fun ProfileScreen(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
+                        ProfileMenuRow(
+                            icon = Icons.Default.CalendarMonth,
+                            title = "My Routine",
+                            onClick = onOpenRoutine
+                        )
+                        Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                         ProfileMenuRow(
                             icon = Icons.Default.EmojiEvents,
                             title = "My Goals",

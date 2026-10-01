@@ -15,7 +15,18 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
-@Database(entities = [TaskEntity::class, CompletionRecordEntity::class, CreditAwardEntity::class], version = 2, exportSchema = false)
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `daysOfWeek` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("UPDATE `tasks` SET `daysOfWeek` = `dayOfWeek` WHERE `daysOfWeek` = ''")
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `isEnabled` INTEGER NOT NULL DEFAULT 1")
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `reminderEnabled` INTEGER NOT NULL DEFAULT 1")
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `effectiveFromDate` TEXT NOT NULL DEFAULT '2000-01-01'")
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `effectiveUntilDate` TEXT DEFAULT NULL")
+    }
+}
+
+@Database(entities = [TaskEntity::class, CompletionRecordEntity::class, CreditAwardEntity::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun routineDao(): RoutineDao
 
@@ -30,7 +41,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "routine_database"
                 )
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
                 INSTANCE = instance

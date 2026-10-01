@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import com.example.ui.screens.MainScreen
 import com.example.ui.screens.OnboardingScreen
 import com.example.ui.theme.MyApplicationTheme
+import com.example.util.CelebrationSoundHelper
 import com.example.viewmodel.RoutineViewModel
 
 class MainActivity : ComponentActivity() {
@@ -18,6 +19,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CelebrationSoundHelper.initialize(this)
         enableEdgeToEdge()
         setContent {
             val themeMode by viewModel.theme.collectAsState()
@@ -34,8 +36,13 @@ class MainActivity : ComponentActivity() {
                 if (!onboardingCompleted) {
                     OnboardingScreen(
                         initialName = userName,
-                        onFinish = { chosenName ->
+                        onFinish = { chosenName, useStarterRoutine ->
                             viewModel.setUserName(chosenName)
+                            if (useStarterRoutine) {
+                                viewModel.loadStarterRoutine()
+                            } else {
+                                viewModel.clearRoutineForCustom()
+                            }
                             viewModel.setOnboardingCompleted(true)
                         }
                     )

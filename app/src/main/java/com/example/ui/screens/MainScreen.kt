@@ -102,7 +102,8 @@ fun MainScreen(viewModel: RoutineViewModel) {
             composable(Screen.Home.route) {
                 TodayScreen(
                     viewModel = viewModel,
-                    onOpenProfile = { navController.navigate(Screen.Profile.route) }
+                    onOpenProfile = { navController.navigate(Screen.Profile.route) },
+                    onOpenRoutine = { navController.navigate("my_routine") }
                 )
             }
             composable(Screen.Calendar.route) {
@@ -114,11 +115,19 @@ fun MainScreen(viewModel: RoutineViewModel) {
             composable(Screen.Profile.route) {
                 ProfileScreen(
                     viewModel = viewModel,
-                    onOpenSettings = { navController.navigate("settings_sub") }
+                    onOpenSettings = { navController.navigate("settings_sub") },
+                    onOpenRoutine = { navController.navigate("my_routine") }
                 )
             }
             composable("settings_sub") {
                 SettingsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    onOpenRoutine = { navController.navigate("my_routine") }
+                )
+            }
+            composable("my_routine") {
+                RoutineManagementScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() }
                 )
