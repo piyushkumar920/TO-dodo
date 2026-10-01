@@ -1,0 +1,8 @@
+{
+  "name": "to-dodo",
+  "description": "A warm, cute, handwritten, cat-themed offline routine and habit companion.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
+

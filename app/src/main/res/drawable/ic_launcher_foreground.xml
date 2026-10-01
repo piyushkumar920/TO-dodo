@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Chick Body -->
+    <path
+        android:fillColor="#FDCB6E"
+        android:pathData="M38,62 C26,50 32,32 50,28 C52,22 62,22 64,28 C82,32 88,50 76,62 C80,78 34,78 38,62 Z" />
+    <path
+        android:strokeColor="#3E2723"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M38,62 C26,50 32,32 50,28 C52,22 62,22 64,28 C82,32 88,50 76,62 C80,78 34,78 38,62 Z" />
+
+    <!-- Left Eye (Open) -->
+    <path
+        android:fillColor="#3E2723"
+        android:pathData="M48,44 A3,3 0 1,0 48,44.01 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M47.2,43.2 A1,1 0 1,0 47.2,43.21 Z" />
+
+    <!-- Right Eye (Winking) -->
+    <path
+        android:strokeColor="#3E2723"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:pathData="M64,46 L68,42 L72,46" />
+
+    <!-- Blushes -->
+    <path
+        android:fillColor="#FF7675"
+        android:pathData="M42,50 A4,4 0 1,0 42,50.01 Z" />
+    <path
+        android:fillColor="#FF7675"
+        android:pathData="M70,50 A4,4 0 1,0 70,50.01 Z" />
+
+    <!-- Beak -->
+    <path
+        android:fillColor="#FF9F43"
+        android:pathData="M54,46 C54,43 62,43 62,46 C62,49 54,49 54,46 Z" />
+    <path
+        android:strokeColor="#3E2723"
+        android:strokeWidth="2.0"
+        android:pathData="M54,46 C54,43 62,43 62,46 C62,49 54,49 54,46 Z" />
+
+    <!-- Checklist Notepad -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M52,50 L74,50 C76,50 78,52 78,54 L78,74 C78,76 76,78 74,78 L52,78 C50,78 48,76 48,74 L48,54 C48,52 50,50 52,50 Z" />
+    <path
+        android:strokeColor="#3E2723"
+        android:strokeWidth="2.2"
+        android:pathData="M52,50 L74,50 C76,50 78,52 78,54 L78,74 C78,76 76,78 74,78 L52,78 C50,78 48,76 48,74 L48,54 C48,52 50,50 52,50 Z" />
+
+    <!-- Checks & Lines on Notepad -->
+    <path
+        android:fillColor="#FDCB6E"
+        android:pathData="M52,55 L57,55 L57,60 L52,60 Z" />
+    <path
+        android:strokeColor="#3E2723"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M53,57.5 L54.5,59 L56.5,56" />
+    <path
+        android:strokeColor="#3E2723"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M60,57.5 L73,57.5" />
+
+    <path
+        android:fillColor="#FDCB6E"
+        android:pathData="M52,64 L57,64 L57,69 L52,69 Z" />
+    <path
+        android:strokeColor="#3E2723"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M53,66.5 L54.5,68 L56.5,65" />
+    <path
+        android:strokeColor="#3E2723"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M60,66.5 L73,66.5" />
+
+    <!-- Little Hands -->
+    <path
+        android:fillColor="#FDCB6E"
+        android:strokeColor="#3E2723"
+        android:strokeWidth="2.0"
+        android:pathData="M48,60 A3.5,3.5 0 1,0 48,60.01 Z" />
+    <path
+        android:fillColor="#FDCB6E"
+        android:strokeColor="#3E2723"
+        android:strokeWidth="2.0"
+        android:pathData="M78,60 A3.5,3.5 0 1,0 78,60.01 Z" />
+
+    <!-- Sparkle marks -->
+    <path
+        android:strokeColor="#3E2723"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M78,28 L84,24" />
+    <path
+        android:strokeColor="#3E2723"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M82,36 L89,35" />
+</vector>
