@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -175,10 +176,12 @@ fun OnboardingScreen(
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedContainerColor = MaterialTheme.colorScheme.surface,
                                     unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                    focusedBorderColor = ToDodoTextDark,
-                                    unfocusedBorderColor = ToDodoBorder,
-                                    focusedTextColor = ToDodoTextDark,
-                                    unfocusedTextColor = ToDodoTextDark
+                                    focusedBorderColor = MaterialTheme.colorScheme.onSurface,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    focusedLabelColor = MaterialTheme.colorScheme.onSurface,
+                                    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -205,6 +208,10 @@ fun OnboardingScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { useStarterRoutine = true }
+                                    .semantics {
+                                        role = Role.RadioButton
+                                        selected = useStarterRoutine
+                                    }
                                     .testTag("use_starter_routine_card"),
                                 shape = RoundedCornerShape(20.dp),
                                 colors = CardDefaults.cardColors(
@@ -212,7 +219,7 @@ fun OnboardingScreen(
                                 ),
                                 border = BorderStroke(
                                     2.dp,
-                                    if (useStarterRoutine) ToDodoTextDark else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                    if (useStarterRoutine) ToDodoTextDark else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
                                 )
                             ) {
                                 Row(
@@ -226,7 +233,7 @@ fun OnboardingScreen(
                                         onClick = { useStarterRoutine = true },
                                         colors = RadioButtonDefaults.colors(
                                             selectedColor = ToDodoTextDark,
-                                            unselectedColor = ToDodoTextDark.copy(alpha = 0.6f)
+                                            unselectedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                         )
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
@@ -235,13 +242,13 @@ fun OnboardingScreen(
                                             text = "Use Starter Routine ⭐",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = ToDodoTextDark
+                                            color = if (useStarterRoutine) ToDodoTextDark else MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "Pre-loaded routine with balanced study, college, guitar & rest",
+                                            text = "Start with a simple pre-made routine and customize it anytime",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = ToDodoTextDark.copy(alpha = 0.8f)
+                                            color = if (useStarterRoutine) ToDodoTextDark.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
@@ -254,6 +261,10 @@ fun OnboardingScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { useStarterRoutine = false }
+                                    .semantics {
+                                        role = Role.RadioButton
+                                        selected = !useStarterRoutine
+                                    }
                                     .testTag("create_own_routine_card"),
                                 shape = RoundedCornerShape(20.dp),
                                 colors = CardDefaults.cardColors(
@@ -261,7 +272,7 @@ fun OnboardingScreen(
                                 ),
                                 border = BorderStroke(
                                     2.dp,
-                                    if (!useStarterRoutine) ToDodoTextDark else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                    if (!useStarterRoutine) ToDodoTextDark else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
                                 )
                             ) {
                                 Row(
@@ -275,7 +286,7 @@ fun OnboardingScreen(
                                         onClick = { useStarterRoutine = false },
                                         colors = RadioButtonDefaults.colors(
                                             selectedColor = ToDodoTextDark,
-                                            unselectedColor = ToDodoTextDark.copy(alpha = 0.6f)
+                                            unselectedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                         )
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
@@ -284,13 +295,13 @@ fun OnboardingScreen(
                                             text = "Create My Routine ✏️",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = ToDodoTextDark
+                                            color = if (!useStarterRoutine) ToDodoTextDark else MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = "Start fresh with an empty routine and add your own tasks",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = ToDodoTextDark.copy(alpha = 0.8f)
+                                            color = if (!useStarterRoutine) ToDodoTextDark.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }

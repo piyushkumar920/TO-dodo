@@ -83,7 +83,14 @@ fun TodayScreen(
 
     var activeBurstOrigin by remember { mutableStateOf<Offset?>(null) }
 
-    val dateFormatted = RoutineTimeEngine.formatActualDate(actualDate)
+    val displayDate = remember(selectedDateStr, actualDate) {
+        try {
+            LocalDate.parse(selectedDateStr)
+        } catch (e: Exception) {
+            actualDate
+        }
+    }
+    val dateFormatted = RoutineTimeEngine.formatActualDate(displayDate)
     val motivationalQuote by viewModel.currentMotivationalQuote.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -526,7 +533,7 @@ fun RoutineStatusCard(
 
                         if (current != null) {
                             Text(
-                                text = if (current.endTime.isNotEmpty()) "${current.startTime} – ${current.endTime}" else current.startTime,
+                                text = if (current.endTime.isNotEmpty()) "${RoutineTimeEngine.formatTimeForDisplay(current.startTime)} – ${RoutineTimeEngine.formatTimeForDisplay(current.endTime)}" else RoutineTimeEngine.formatTimeForDisplay(current.startTime),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = ToDodoTextDark
@@ -569,7 +576,7 @@ fun RoutineStatusCard(
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "${next.title}  •  ${if (next.endTime.isNotEmpty()) "${next.startTime} – ${next.endTime}" else next.startTime}",
+                                text = "${next.title}  •  ${if (next.endTime.isNotEmpty()) "${RoutineTimeEngine.formatTimeForDisplay(next.startTime)} – ${RoutineTimeEngine.formatTimeForDisplay(next.endTime)}" else RoutineTimeEngine.formatTimeForDisplay(next.startTime)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = ToDodoTextDark,
                                 maxLines = 1
@@ -615,7 +622,7 @@ fun RoutineStatusCard(
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "${next.title} at ${next.startTime}",
+                                text = "${next.title} at ${RoutineTimeEngine.formatTimeForDisplay(next.startTime)}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -783,7 +790,7 @@ fun ToDodoTaskItem(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = if (task.endTime.isNotEmpty()) "${task.startTime} – ${task.endTime}" else task.startTime,
+                            text = if (task.endTime.isNotEmpty()) "${RoutineTimeEngine.formatTimeForDisplay(task.startTime)} – ${RoutineTimeEngine.formatTimeForDisplay(task.endTime)}" else RoutineTimeEngine.formatTimeForDisplay(task.startTime),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

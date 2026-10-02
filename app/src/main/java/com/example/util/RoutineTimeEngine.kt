@@ -117,6 +117,45 @@ object RoutineTimeEngine {
         return parseTimeToLogicalMinutes(timeStr, 0) ?: 0
     }
 
+    data class Time12Hour(
+        val hour12: Int, // 1 to 12
+        val minute: Int, // 0 to 59
+        val isAm: Boolean
+    ) {
+        fun toCanonical24HourString(): String {
+            val h24 = when {
+                isAm -> if (hour12 == 12) 0 else hour12
+                else -> if (hour12 == 12) 12 else hour12 + 12
+            }
+            return String.format(Locale.getDefault(), "%02d:%02d", h24, minute)
+        }
+    }
+
+    fun parseTo12Hour(timeStr: String): Time12Hour {
+        val logicalMins = parseTimeToLogicalMinutes(timeStr, 0) ?: 540
+        val (h24, min) = logicalMinutesToWallClock(logicalMins)
+        val isAm = h24 < 12
+        val h12 = when {
+            h24 == 0 -> 12
+            h24 <= 12 -> h24
+            else -> h24 - 12
+        }
+        return Time12Hour(h12, min, isAm)
+    }
+
+    fun formatTimeForDisplay(timeStr: String): String {
+        val trimmed = timeStr.trim()
+        if (trimmed.isEmpty()) return ""
+        val upper = trimmed.uppercase()
+        if (upper.contains("AM") || upper.contains("PM")) {
+            return trimmed
+        }
+        val t12 = parseTo12Hour(trimmed)
+        val minStr = String.format(Locale.getDefault(), "%02d", t12.minute)
+        val amPmStr = if (t12.isAm) "AM" else "PM"
+        return "${t12.hour12}:$minStr $amPmStr"
+    }
+
     /**
      * Converts logical day minutes (0 = 04:00 AM) back to standard 24-hour clock (hour, minute).
      */
@@ -196,6 +235,18 @@ object RoutineTimeEngine {
         }
 
         return toLogicalMinutes(resolvedHour24, parsedMin)
+    }
+
+    /**
+     * Centralized schedule resolver: returns the effective active tasks for a specific logical date string (YYYY-MM-DD).
+     */
+    fun getEffectiveTasksForLogicalDate(tasks: List<TaskEntity>, dateStr: String): List<TaskEntity> {
+        return try {
+            val date = LocalDate.parse(dateStr)
+            RoutineScheduleResolver.getEffectiveTasksForDate(tasks, date)
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     /**

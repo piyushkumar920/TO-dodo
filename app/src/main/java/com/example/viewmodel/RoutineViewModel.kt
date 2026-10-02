@@ -16,6 +16,7 @@ import com.example.data.repository.RoutineRepository
 import com.example.util.CategoryHelper
 import com.example.util.NotificationHelper
 import com.example.util.RoutineNotificationScheduler
+import com.example.util.RoutineScheduleResolver
 import com.example.util.RoutineTimeEngine
 import com.example.widget.ToDodoWidgetProvider
 import kotlinx.coroutines.delay
@@ -256,15 +257,20 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
 
     // Tasks for the currently selected date's day of week
     val tasksForSelectedDate: StateFlow<List<TaskEntity>> = combine(_allTasks, _selectedDate) { tasks, dateStr ->
-        try {
-            val date = LocalDate.parse(dateStr)
-            val dayName = date.dayOfWeek.name
-            tasks.filter { task ->
-                task.isEffectiveOn(dateStr) && task.repeatsOn(dayName)
-            }.sortedWith(compareBy({ RoutineTimeEngine.toLogicalMinutes(it.startTime) }, { it.sortOrder }))
-        } catch (e: Exception) {
-            emptyList()
+        val resolvedDate = try { java.time.LocalDate.parse(dateStr) } catch (e: Exception) { RoutineTimeEngine.getLogicalDate() }
+        val effective = RoutineScheduleResolver.getEffectiveTasksForDate(tasks, resolvedDate)
+        
+        android.util.Log.d("ScheduleResolver", "=== SCHEDULE RESOLUTION DIAGNOSTIC ===")
+        android.util.Log.d("ScheduleResolver", "HOME DATE: $dateStr")
+        android.util.Log.d("ScheduleResolver", "HOME DAY: ${resolvedDate.dayOfWeek.name}")
+        android.util.Log.d("ScheduleResolver", "TOTAL ROOM TASK COUNT: ${tasks.size}")
+        android.util.Log.d("ScheduleResolver", "ENABLED TASK COUNT: ${tasks.count { it.isEnabled }}")
+        android.util.Log.d("ScheduleResolver", "EFFECTIVE TASK COUNT: ${tasks.count { it.isEnabled && it.isEffectiveOn(dateStr) }}")
+        android.util.Log.d("ScheduleResolver", "FINAL TASK COUNT: ${effective.size}")
+        effective.forEach { t ->
+            android.util.Log.d("ScheduleResolver", "HOME TASK: id=${t.id}, title=${t.title}, start=${t.startTime}, end=${t.endTime}, isEnabled=${t.isEnabled}, effectiveFrom=${t.effectiveFromDate}, effectiveUntil=${t.effectiveUntilDate}, days=${t.daysOfWeek}")
         }
+        effective
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Real-time Routine Status (CURRENT_TASK, BETWEEN_TASKS, BEFORE_FIRST_TASK, AFTER_LAST_TASK, NO_TASKS_TODAY)
@@ -292,14 +298,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     )
 
     fun getProgressForDate(dateStr: String): DailyProgress {
-        val tasks = _allTasks.value.filter { task ->
-            try {
-                val d = LocalDate.parse(dateStr)
-                task.isEffectiveOn(dateStr) && task.repeatsOn(d.dayOfWeek.name)
-            } catch (e: Exception) {
-                false
-            }
-        }
+        val tasks = RoutineTimeEngine.getEffectiveTasksForLogicalDate(_allTasks.value, dateStr)
         val total = tasks.size
         if (total == 0) return DailyProgress(0, 0, 0)
         val comps = _allCompletions.value.filter { it.date == dateStr && it.completed }
@@ -651,7 +650,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         reminderEnabled: Boolean = true
     ) {
         viewModelScope.launch {
-            val nextLogicalDate = RoutineTimeEngine.getLogicalDate().plusDays(1).toString()
+            val currentLogicalDate = RoutineTimeEngine.getLogicalDate().toString()
             val taskId = "TASK_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
             val primaryDay = daysOfWeek.firstOrNull() ?: "MONDAY"
             val daysStr = daysOfWeek.joinToString(",")
@@ -668,7 +667,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 daysOfWeek = daysStr,
                 isEnabled = true,
                 reminderEnabled = reminderEnabled,
-                effectiveFromDate = nextLogicalDate,
+                effectiveFromDate = currentLogicalDate,
                 effectiveUntilDate = null
             )
             repository.insertTask(newTask)
@@ -688,17 +687,11 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     ) {
         viewModelScope.launch {
             val currentLogicalDate = RoutineTimeEngine.getLogicalDate().toString()
-            val nextLogicalDate = RoutineTimeEngine.getLogicalDate().plusDays(1).toString()
             val primaryDay = newDaysOfWeek.firstOrNull() ?: existingTask.dayOfWeek
             val newDaysStr = newDaysOfWeek.joinToString(",")
             val newSortOrder = RoutineTimeEngine.toLogicalMinutes(newStartTime)
 
-            // Archive the existing schedule version up to today (preserving historical schedule)
-            repository.updateTask(existingTask.copy(effectiveUntilDate = currentLogicalDate))
-
-            // Create updated version starting next logical day
-            val updatedTask = TaskEntity(
-                id = "${existingTask.id}_v${System.currentTimeMillis().toString().takeLast(5)}",
+            val updatedTask = existingTask.copy(
                 dayOfWeek = primaryDay,
                 title = newTitle.trim(),
                 startTime = newStartTime.trim(),
@@ -706,12 +699,11 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 category = newCategory.trim(),
                 sortOrder = newSortOrder,
                 daysOfWeek = newDaysStr,
-                isEnabled = existingTask.isEnabled,
                 reminderEnabled = newReminderEnabled,
-                effectiveFromDate = nextLogicalDate,
+                effectiveFromDate = if (existingTask.effectiveFromDate.isBlank() || existingTask.effectiveFromDate == "2000-01-01") currentLogicalDate else existingTask.effectiveFromDate,
                 effectiveUntilDate = null
             )
-            repository.insertTask(updatedTask)
+            repository.updateTask(updatedTask)
             ToDodoWidgetProvider.updateWidgets(getApplication())
             RoutineNotificationScheduler.scheduleNotifications(getApplication())
         }
@@ -720,8 +712,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     fun deleteCustomTask(task: TaskEntity) {
         viewModelScope.launch {
             val currentLogicalDate = RoutineTimeEngine.getLogicalDate().toString()
-            // Setting effectiveUntilDate = currentLogicalDate preserves past completions while removing from future schedule
-            repository.updateTask(task.copy(effectiveUntilDate = currentLogicalDate))
+            repository.deleteTask(task)
             NotificationHelper.cancelTaskNotification(getApplication(), task.id)
             RoutineNotificationScheduler.cancelTaskReminder(getApplication(), task.id, currentLogicalDate)
             ToDodoWidgetProvider.updateWidgets(getApplication())

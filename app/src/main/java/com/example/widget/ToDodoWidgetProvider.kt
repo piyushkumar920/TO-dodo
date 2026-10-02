@@ -68,9 +68,7 @@ class ToDodoWidgetProvider : AppWidgetProvider() {
                     val dayName = logicalDate.dayOfWeek.name
 
                     val allTasks = dao.getAllTasks().first()
-                    val tasksForDay = allTasks.filter { task ->
-                        task.isEffectiveOn(logicalDateStr) && task.repeatsOn(dayName)
-                    }.sortedWith(compareBy({ RoutineTimeEngine.toLogicalMinutes(it.startTime) }, { it.sortOrder }))
+                    val tasksForDay = RoutineTimeEngine.getEffectiveTasksForLogicalDate(allTasks, logicalDateStr)
 
                     val allCompletions = dao.getCompletionsForDate(logicalDateStr).first()
                     val completedCount = tasksForDay.count { task ->
@@ -121,7 +119,7 @@ class ToDodoWidgetProvider : AppWidgetProvider() {
 
                 val nextTask = routineStatus.nextTask
                 if (nextTask != null) {
-                    setTextViewText(R.id.widget_next_task_text, "Up next: ${nextTask.title} at ${nextTask.startTime}")
+                    setTextViewText(R.id.widget_next_task_text, "Up next: ${nextTask.title} at ${RoutineTimeEngine.formatTimeForDisplay(nextTask.startTime)}")
                 } else {
                     setTextViewText(R.id.widget_next_task_text, routineStatus.subtitle)
                 }

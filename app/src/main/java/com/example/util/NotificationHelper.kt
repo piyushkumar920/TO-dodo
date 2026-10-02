@@ -80,12 +80,12 @@ object NotificationHelper {
         }
     }
 
-    fun getReminderNotificationId(taskId: String): Int {
-        return abs(("NOTIF_REMINDER_$taskId").hashCode())
+    fun getReminderNotificationId(taskId: String, startTime: String = ""): Int {
+        return abs(("NOTIF_REMINDER_${taskId}_${startTime}").hashCode())
     }
 
-    fun getUpcomingNotificationId(taskId: String): Int {
-        return abs(("NOTIF_UPCOMING_$taskId").hashCode())
+    fun getUpcomingNotificationId(taskId: String, startTime: String = ""): Int {
+        return abs(("NOTIF_UPCOMING_${taskId}_${startTime}").hashCode())
     }
 
     fun showTaskReminder(
@@ -100,10 +100,11 @@ object NotificationHelper {
 
         val emoji = getCategoryEmoji(category)
         val notifTitle = "$emoji $title"
+        val formattedTime = RoutineTimeEngine.formatTimeForDisplay(startTime)
         val notifText = if (minutesBefore <= 0) {
-            "Starts now at $startTime."
+            "Starts now at $formattedTime."
         } else {
-            "Starts in $minutesBefore minutes ($startTime)."
+            "Starts in $minutesBefore minutes ($formattedTime)."
         }
 
         val builder = NotificationCompat.Builder(context, CHANNEL_TASK_REMINDERS)
@@ -116,7 +117,7 @@ object NotificationHelper {
 
         try {
             val manager = NotificationManagerCompat.from(context)
-            manager.notify(getReminderNotificationId(taskId), builder.build())
+            manager.notify(getReminderNotificationId(taskId, startTime), builder.build())
         } catch (e: SecurityException) {
             // Permission not granted on Android 13+, fails gracefully
         }
@@ -133,7 +134,8 @@ object NotificationHelper {
 
         val emoji = getCategoryEmoji(category)
         val notifTitle = "🔔 Up next"
-        val notifText = "$emoji $title starts at $startTime."
+        val formattedTime = RoutineTimeEngine.formatTimeForDisplay(startTime)
+        val notifText = "$emoji $title starts at $formattedTime."
 
         val builder = NotificationCompat.Builder(context, CHANNEL_UPCOMING_TASKS)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
@@ -145,7 +147,7 @@ object NotificationHelper {
 
         try {
             val manager = NotificationManagerCompat.from(context)
-            manager.notify(getUpcomingNotificationId(taskId), builder.build())
+            manager.notify(getUpcomingNotificationId(taskId, startTime), builder.build())
         } catch (e: SecurityException) {
             // Permission not granted on Android 13+, fails gracefully
         }

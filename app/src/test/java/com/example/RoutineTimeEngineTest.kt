@@ -165,4 +165,69 @@ class RoutineTimeEngineTest {
         assertEquals("Wind down", status.currentTask?.title)
         assertEquals("Sleep", status.nextTask?.title)
     }
+
+    @Test
+    fun testAmPmDistinctionAndFormatting() {
+        // 9 AM vs 9 PM
+        val am12 = RoutineTimeEngine.parseTo12Hour("09:00")
+        assertEquals(9, am12.hour12)
+        assertTrue(am12.isAm)
+        assertEquals("09:00", am12.toCanonical24HourString())
+        assertEquals("9:00 AM", RoutineTimeEngine.formatTimeForDisplay("09:00"))
+
+        val pm12 = RoutineTimeEngine.parseTo12Hour("21:00")
+        assertEquals(9, pm12.hour12)
+        assertFalse(pm12.isAm)
+        assertEquals("21:00", pm12.toCanonical24HourString())
+        assertEquals("9:00 PM", RoutineTimeEngine.formatTimeForDisplay("21:00"))
+
+        // 12 AM vs 12 PM
+        val midnight12 = RoutineTimeEngine.parseTo12Hour("00:00")
+        assertEquals(12, midnight12.hour12)
+        assertTrue(midnight12.isAm)
+        assertEquals("00:00", midnight12.toCanonical24HourString())
+        assertEquals("12:00 AM", RoutineTimeEngine.formatTimeForDisplay("00:00"))
+
+        val noon12 = RoutineTimeEngine.parseTo12Hour("12:00")
+        assertEquals(12, noon12.hour12)
+        assertFalse(noon12.isAm)
+        assertEquals("12:00", noon12.toCanonical24HourString())
+        assertEquals("12:00 PM", RoutineTimeEngine.formatTimeForDisplay("12:00"))
+
+        // Notification request code uniqueness for 9 AM vs 9 PM tasks
+        val codeMorning = com.example.util.RoutineNotificationScheduler.getReminderRequestCode("task_a", "2026-10-02", "09:00")
+        val codeEvening = com.example.util.RoutineNotificationScheduler.getReminderRequestCode("task_a", "2026-10-02", "21:00")
+        assertNotEquals(codeMorning, codeEvening)
+    }
+
+    @Test
+    fun testGetEffectiveTasksForLogicalDate() {
+        val tasks = listOf(
+            TaskEntity("1", "MONDAY", "Monday Task", "09:00", "10:00", "Study", 0, daysOfWeek = "MONDAY", effectiveFromDate = "2026-01-01", effectiveUntilDate = null),
+            TaskEntity("2", "MONDAY", "Expired Task", "10:00", "11:00", "Study", 1, daysOfWeek = "MONDAY", effectiveFromDate = "2026-01-01", effectiveUntilDate = "2026-09-30"),
+            TaskEntity("3", "MONDAY", "Future Task", "11:00", "12:00", "Study", 2, daysOfWeek = "MONDAY", effectiveFromDate = "2026-10-12", effectiveUntilDate = null),
+            TaskEntity("4", "FRIDAY", "Friday Task", "14:00", "15:00", "Work", 3, daysOfWeek = "FRIDAY", effectiveFromDate = "2026-01-01", effectiveUntilDate = null),
+            TaskEntity("5", "MONDAY", "Disabled Task", "15:00", "16:00", "Rest", 4, daysOfWeek = "MONDAY", isEnabled = false, effectiveFromDate = "2026-01-01", effectiveUntilDate = null)
+        )
+
+        // Monday October 5, 2026 -> should only return "Monday Task"
+        val mondayEffective = RoutineTimeEngine.getEffectiveTasksForLogicalDate(tasks, "2026-10-05")
+        assertEquals(1, mondayEffective.size)
+        assertEquals("Monday Task", mondayEffective[0].title)
+
+        // Friday October 2, 2026 -> should return "Friday Task"
+        val fridayEffective = RoutineTimeEngine.getEffectiveTasksForLogicalDate(tasks, "2026-10-02")
+        // Wait, Oct 2, 2026 is Friday! Let's check: 2026-10-02 is Friday.
+        // If Oct 2 is Friday, "Monday Task" repeats on Monday (not Friday), and "Friday Task" repeats on Friday.
+        // Let's test explicitly:
+        val oct2FridayTasks = RoutineTimeEngine.getEffectiveTasksForLogicalDate(tasks, "2026-10-02")
+        assertEquals(1, oct2FridayTasks.size)
+        assertEquals("Friday Task", oct2FridayTasks[0].title)
+
+        // Monday September 28, 2026 -> Monday Task is effective, Expired Task is effective
+        val sep28MondayTasks = RoutineTimeEngine.getEffectiveTasksForLogicalDate(tasks, "2026-09-28")
+        assertEquals(2, sep28MondayTasks.size)
+        assertEquals("Monday Task", sep28MondayTasks[0].title)
+        assertEquals("Expired Task", sep28MondayTasks[1].title)
+    }
 }

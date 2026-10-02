@@ -29,6 +29,7 @@ import com.example.ui.screens.getCategoryPastelColor
 import com.example.ui.theme.*
 import com.example.util.CategoryHelper
 import com.example.util.RoutineTimeEngine
+import java.util.Locale
 
 private val DAYS_OF_WEEK_ORDER = listOf(
     "MONDAY" to "Mon",
@@ -273,57 +274,27 @@ fun AddEditTaskDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Start Time",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = startTime,
-                            onValueChange = {
+                    Box(modifier = Modifier.weight(1f)) {
+                        TimeSelector(
+                            label = "Start Time",
+                            initialTimeStr = startTime,
+                            testTagInput = "task_start_time",
+                            onTimeChanged = {
                                 startTime = it
                                 errorMessage = null
-                            },
-                            placeholder = { Text("09:00") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("task_start_time_input"),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = ToDodoYellow,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                            )
+                            }
                         )
                     }
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "End Time",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = endTime,
-                            onValueChange = {
+                    Box(modifier = Modifier.weight(1f)) {
+                        TimeSelector(
+                            label = "End Time",
+                            initialTimeStr = endTime,
+                            testTagInput = "task_end_time",
+                            onTimeChanged = {
                                 endTime = it
                                 errorMessage = null
-                            },
-                            placeholder = { Text("10:00") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("task_end_time_input"),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = ToDodoYellow,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                            )
+                            }
                         )
                     }
                 }
@@ -574,5 +545,145 @@ fun AddEditTaskDialog(
                 }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TimeSelector(
+    label: String,
+    initialTimeStr: String,
+    testTagInput: String,
+    onTimeChanged: (String) -> Unit
+) {
+    var showPicker by remember { mutableStateOf(false) }
+    val formattedDisplayTime = remember(initialTimeStr) {
+        RoutineTimeEngine.formatTimeForDisplay(initialTimeStr)
+    }
+
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.5.dp, ToDodoYellow),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .clickable { showPicker = true }
+                .testTag(testTagInput),
+            shadowElevation = 1.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = formattedDisplayTime,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "⏰",
+                    fontSize = 18.sp
+                )
+            }
+        }
+    }
+
+    if (showPicker) {
+        val initial12 = remember(initialTimeStr) { RoutineTimeEngine.parseTo12Hour(initialTimeStr) }
+        val initialHour24 = when {
+            initial12.isAm -> if (initial12.hour12 == 12) 0 else initial12.hour12
+            else -> if (initial12.hour12 == 12) 12 else initial12.hour12 + 12
+        }
+        val timePickerState = rememberTimePickerState(
+            initialHour = initialHour24,
+            initialMinute = initial12.minute,
+            is24Hour = false
+        )
+
+        Dialog(
+            onDismissRequest = { showPicker = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                modifier = Modifier
+                    .wrapContentWidth()
+                    .wrapContentHeight()
+                    .padding(16.dp)
+                    .testTag("${testTagInput}_picker_dialog")
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "SELECT TIME",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
+                    )
+
+                    TimePicker(
+                        state = timePickerState,
+                        modifier = Modifier.testTag("${testTagInput}_picker")
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = { showPicker = false },
+                            modifier = Modifier.testTag("${testTagInput}_cancel_btn")
+                        ) {
+                            Text("Cancel", color = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val h24 = timePickerState.hour
+                                val m = timePickerState.minute
+                                val isAm = h24 < 12
+                                val h12 = when {
+                                    h24 == 0 -> 12
+                                    h24 <= 12 -> h24
+                                    else -> h24 - 12
+                                }
+                                val canonical = RoutineTimeEngine.Time12Hour(h12, m, isAm).toCanonical24HourString()
+                                onTimeChanged(canonical)
+                                showPicker = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ToDodoYellow),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.testTag("${testTagInput}_ok_btn")
+                        ) {
+                            Text("OK", color = ToDodoTextDark, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

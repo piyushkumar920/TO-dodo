@@ -25,8 +25,10 @@ import com.example.data.db.TaskEntity
 import com.example.ui.components.AddEditTaskDialog
 import com.example.ui.components.SleepingCat
 import com.example.ui.theme.*
+import com.example.util.RoutineScheduleResolver
 import com.example.util.RoutineTimeEngine
 import com.example.viewmodel.RoutineViewModel
+import java.time.LocalDate
 
 private val DAYS = listOf(
     "MONDAY" to "Monday",
@@ -44,17 +46,21 @@ fun RoutineManagementScreen(
     viewModel: RoutineViewModel,
     onBack: () -> Unit
 ) {
+    val selectedDateStr by viewModel.selectedDate.collectAsState()
     val allTasks by viewModel.allTasks.collectAsState()
     val customCategories by viewModel.customCategories.collectAsState()
     var selectedDay by remember { mutableStateOf("MONDAY") }
     var taskToEdit by remember { mutableStateOf<TaskEntity?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
 
-    // Filter active tasks for the selected day, sorted chronologically by start time
-    val dayTasks = remember(allTasks, selectedDay) {
-        allTasks.filter { task ->
-            task.effectiveUntilDate == null && task.repeatsOn(selectedDay)
-        }.sortedWith(compareBy({ RoutineTimeEngine.toLogicalMinutes(it.startTime) }, { it.sortOrder }))
+    // Filter active tasks for the selected day using RoutineScheduleResolver, honoring effective dates
+    val dayTasks = remember(allTasks, selectedDay, selectedDateStr) {
+        val refDate = try {
+            LocalDate.parse(selectedDateStr)
+        } catch (e: Exception) {
+            LocalDate.now()
+        }
+        RoutineScheduleResolver.getEditorTasksForDayName(allTasks, selectedDay, refDate)
     }
 
     Scaffold(
@@ -220,7 +226,7 @@ fun RoutineManagementScreen(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Text(
-                                            text = if (task.endTime.isNotEmpty()) "${task.startTime} – ${task.endTime}" else task.startTime,
+                                            text = if (task.endTime.isNotEmpty()) "${RoutineTimeEngine.formatTimeForDisplay(task.startTime)} – ${RoutineTimeEngine.formatTimeForDisplay(task.endTime)}" else RoutineTimeEngine.formatTimeForDisplay(task.startTime),
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

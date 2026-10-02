@@ -111,7 +111,7 @@ class ToDodoWidgetTest {
         assertEquals("2/4 • 50%", progressText.text.toString())
         assertEquals(50, progressBar.progress)
         assertEquals("Currently: DSA Practice", headlineText.text.toString())
-        assertEquals("Up next: Guitar at 15:30", nextTaskText.text.toString())
+        assertEquals("Up next: Guitar at 3:30 PM", nextTaskText.text.toString())
     }
 
     @Test

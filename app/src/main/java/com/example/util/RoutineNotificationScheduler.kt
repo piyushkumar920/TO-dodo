@@ -22,12 +22,12 @@ object RoutineNotificationScheduler {
 
     const val MORNING_SUMMARY_REQUEST_CODE = 99901
 
-    fun getReminderRequestCode(taskId: String, dateStr: String): Int {
-        return abs(("REMINDER_${taskId}_${dateStr}").hashCode())
+    fun getReminderRequestCode(taskId: String, dateStr: String, startTime: String = ""): Int {
+        return abs(("REMINDER_${taskId}_${dateStr}_${startTime}").hashCode())
     }
 
-    fun getUpcomingRequestCode(taskId: String, dateStr: String): Int {
-        return abs(("UPCOMING_${taskId}_${dateStr}").hashCode())
+    fun getUpcomingRequestCode(taskId: String, dateStr: String, startTime: String = ""): Int {
+        return abs(("UPCOMING_${taskId}_${dateStr}_${startTime}").hashCode())
     }
 
     fun scheduleNotifications(context: Context) {
@@ -62,9 +62,7 @@ object RoutineNotificationScheduler {
                     val dateStr = targetLogicalDate.toString()
                     val dayOfWeekName = targetLogicalDate.dayOfWeek.name
 
-                    val tasksForDay = allTasks.filter { task ->
-                        task.isEnabled && task.isEffectiveOn(dateStr) && task.repeatsOn(dayOfWeekName)
-                    }
+                    val tasksForDay = RoutineTimeEngine.getEffectiveTasksForLogicalDate(allTasks, dateStr)
 
                     val completedTaskIds = allCompletions
                         .filter { it.date == dateStr && it.completed }
@@ -93,7 +91,7 @@ object RoutineNotificationScheduler {
                                 }
                                 val pendingIntent = PendingIntent.getBroadcast(
                                     context,
-                                    getReminderRequestCode(task.id, dateStr),
+                                    getReminderRequestCode(task.id, dateStr, task.startTime),
                                     intent,
                                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                                 )
@@ -116,7 +114,7 @@ object RoutineNotificationScheduler {
                                 }
                                 val pendingIntent = PendingIntent.getBroadcast(
                                     context,
-                                    getUpcomingRequestCode(task.id, dateStr),
+                                    getUpcomingRequestCode(task.id, dateStr, task.startTime),
                                     intent,
                                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                                 )

@@ -161,63 +161,81 @@ fun CalendarScreen(viewModel: RoutineViewModel) {
                             val leadingEmptyDays = firstDayOfWeek - 1
                             val totalGridCells = leadingEmptyDays + daysInMonth
 
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(7),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(240.dp),
-                                userScrollEnabled = false
-                            ) {
-                                items(totalGridCells) { index ->
-                                    if (index >= leadingEmptyDays) {
-                                        val dayNumber = index - leadingEmptyDays + 1
-                                        val date = currentYearMonth.atDay(dayNumber)
-                                        val dateIso = date.toString()
-                                        val isSelected = dateIso == selectedDateStr
-                                        val isCompletedDay = completedDatesSet.contains(dateIso)
-                                        val isToday = date == LocalDate.now()
+                            val cells = (0 until totalGridCells).map { index ->
+                                if (index >= leadingEmptyDays) {
+                                    index - leadingEmptyDays + 1
+                                } else {
+                                    null
+                                }
+                            }
+                            val weeks = cells.chunked(7)
 
-                                        Box(
-                                            modifier = Modifier
-                                                .aspectRatio(1f)
-                                                .padding(2.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                    when {
-                                                        isSelected -> ToDodoYellow
-                                                        isCompletedDay -> ToDodoYellowLight
-                                                        isToday -> MaterialTheme.colorScheme.surfaceVariant
-                                                        else -> Color.Transparent
-                                                    }
-                                                )
-                                                .clickable {
-                                                    viewModel.setSelectedDate(dateIso)
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text(
-                                                    text = "$dayNumber",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
-                                                    color = when {
-                                                        isSelected -> ToDodoTextDark
-                                                        isCompletedDay -> ToDodoTextDark
-                                                        else -> MaterialTheme.colorScheme.onSurface
-                                                    }
-                                                )
-                                                if (isCompletedDay && !isSelected) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                weeks.forEach { week ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        for (i in 0 until 7) {
+                                            val dayNumber = if (i < week.size) week[i] else null
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .aspectRatio(1f)
+                                                    .padding(2.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (dayNumber != null) {
+                                                    val date = currentYearMonth.atDay(dayNumber)
+                                                    val dateIso = date.toString()
+                                                    val isSelected = dateIso == selectedDateStr
+                                                    val isCompletedDay = completedDatesSet.contains(dateIso)
+                                                    val isToday = date == LocalDate.now()
+
                                                     Box(
                                                         modifier = Modifier
-                                                            .size(4.dp)
+                                                            .fillMaxSize()
                                                             .clip(CircleShape)
-                                                            .background(ToDodoOrange)
-                                                    )
+                                                            .background(
+                                                                when {
+                                                                    isSelected -> ToDodoYellow
+                                                                    isCompletedDay -> ToDodoYellowLight
+                                                                    isToday -> MaterialTheme.colorScheme.surfaceVariant
+                                                                    else -> Color.Transparent
+                                                                }
+                                                            )
+                                                            .clickable {
+                                                                viewModel.setSelectedDate(dateIso)
+                                                            },
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                            Text(
+                                                                text = "$dayNumber",
+                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
+                                                                color = when {
+                                                                    isSelected -> ToDodoTextDark
+                                                                    isCompletedDay -> ToDodoTextDark
+                                                                    else -> MaterialTheme.colorScheme.onSurface
+                                                                }
+                                                            )
+                                                            if (isCompletedDay && !isSelected) {
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .size(4.dp)
+                                                                        .clip(CircleShape)
+                                                                        .background(ToDodoOrange)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
-                                    } else {
-                                        Spacer(modifier = Modifier.aspectRatio(1f))
                                     }
                                 }
                             }
